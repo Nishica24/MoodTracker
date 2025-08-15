@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import logging
+import os
 
 # Add ONNX runtime imports
 import onnxruntime as ort
@@ -20,30 +21,42 @@ tokenizer = None
 
 # Real RoBERTa emotion classifier
 def roberta_emotion_analysis(text):
-    """Real emotion analysis using RoBERTa model"""
+    """Real emotion analysis using ONNX model"""
     global onnx_session, tokenizer
     
     if not onnx_session or not tokenizer:
+        logger.error("Model or tokenizer not loaded")
         return None
     
     try:
         # Tokenize input
         inputs = tokenizer(text, return_tensors="np", padding=True, truncation=True, max_length=512)
         
-        # Run inference with both required inputs
-        input_ids_name = onnx_session.get_inputs()[0].name  # input_ids
-        attention_mask_name = onnx_session.get_inputs()[1].name  # attention_mask
+        # Get input names from the model
+        input_names = [input.name for input in onnx_session.get_inputs()]
         output_name = onnx_session.get_outputs()[0].name
         
-        outputs = onnx_session.run([output_name], {
-            input_ids_name: inputs['input_ids'],
-            attention_mask_name: inputs['attention_mask']
-        })
+        # Prepare input dictionary
+        input_dict = {}
+        if 'input_ids' in input_names:
+            input_dict['input_ids'] = inputs['input_ids']
+        if 'attention_mask' in input_names:
+            input_dict['attention_mask'] = inputs['attention_mask']
         
-        # Process outputs (assuming 28 emotion classes)
+        logger.info(f"Running inference with input keys: {list(input_dict.keys())}")
+        
+        # Run inference
+        outputs = onnx_session.run([output_name], input_dict)
+        
+        # Process outputs
         scores = outputs[0][0]  # Get first batch, first sequence
         
+        logger.info(f"Raw scores shape: {outputs[0].shape}")
+        logger.info(f"Score range: min={scores.min():.4f}, max={scores.max():.4f}")
+        logger.info(f"Top 5 raw scores: {scores[:5]}")
+        
         # Create emotion labels (adjust these to match your training)
+        # You should update this list to match the exact emotions you trained on
         emotions = [
             "admiration", "amusement", "anger", "annoyance", "approval", "caring", 
             "confusion", "curiosity", "desire", "disappointment", "disapproval", 
@@ -51,6 +64,22 @@ def roberta_emotion_analysis(text):
             "joy", "love", "nervousness", "optimism", "pride", "realization", 
             "relief", "remorse", "sadness", "surprise", "neutral"
         ]
+        
+        # Ensure we have the right number of emotions
+        if len(scores) != len(emotions):
+            logger.warning(f"Model output has {len(scores)} classes but emotions list has {len(emotions)}")
+            # Create generic labels if mismatch
+            emotions = [f"emotion_{i}" for i in range(len(scores))]
+        
+        # Check if scores are logits (need softmax) or probabilities
+        score_sum = np.sum(scores)
+        if score_sum > 1.1:  # Likely logits, apply softmax
+            logger.info("Scores appear to be logits, applying softmax")
+            scores = np.exp(scores) / np.sum(np.exp(scores))
+        elif score_sum < 0.9:  # Likely already probabilities
+            logger.info("Scores appear to be probabilities")
+        else:
+            logger.info("Scores are close to 1, may need normalization")
         
         # Format scores
         formatted_scores = []
@@ -63,23 +92,39 @@ def roberta_emotion_analysis(text):
         
         # Sort by confidence
         formatted_scores.sort(key=lambda x: x['confidence'], reverse=True)
+        
+        logger.info(f"Top emotion: {formatted_scores[0]['emotion']} ({formatted_scores[0]['percentage']}%)")
+        
         return formatted_scores
         
     except Exception as e:
-        logger.error(f"Error during RoBERTa inference: {e}")
+        logger.error(f"Error during ONNX inference: {e}")
         return None
 
 def load_onnx_model():
     """Load the ONNX emotion detection model"""
     global onnx_session, tokenizer
     try:
+        # Get the current directory (Backend folder)
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        model_path = os.path.join(current_dir, "Models", "model.onnx")
+        
+        # Check if model file exists
+        if not os.path.exists(model_path):
+            logger.error(f"Model file not found at: {model_path}")
+            return False
+        
         # Load ONNX model
-        onnx_session = ort.InferenceSession("models/model.onnx")
+        onnx_session = ort.InferenceSession(model_path)
         
         # Load tokenizer (you'll need this from your training)
+        # Update this to match the tokenizer you used during training
         tokenizer = AutoTokenizer.from_pretrained("SamLowe/roberta-base-go_emotions")
         
-        logger.info("✅ ONNX model loaded successfully!")
+        logger.info(f"✅ ONNX model loaded successfully from: {model_path}")
+        logger.info(f"✅ Tokenizer loaded successfully")
+        logger.info(f"✅ Model inputs: {[input.name for input in onnx_session.get_inputs()]}")
+        logger.info(f"✅ Model outputs: {[output.name for output in onnx_session.get_outputs()]}")
         return True
     except Exception as e:
         logger.error(f"❌ Error loading ONNX model: {e}")
@@ -93,6 +138,7 @@ def health_check():
     return jsonify({
         "status": "healthy",
         "model_loaded": onnx_session is not None,
+        "tokenizer_loaded": tokenizer is not None,
         "message": "ONNX Mood Analysis API is running" if onnx_session else "Mock Mood Analysis API is running (ONNX failed to load)"
     })
 
@@ -125,10 +171,17 @@ def generate_mood_score():
 
         logger.info(f"Analyzing text: {text_to_analyze}")
 
-        # Generate emotion predictions using RoBERTa model
+        # Check if model is loaded
+        if not onnx_session:
+            return jsonify({
+                "error": "ONNX model not loaded",
+                "success": False
+            }), 500
+
+        # Generate emotion predictions using ONNX model
         mood_scores = roberta_emotion_analysis(text_to_analyze)
         if not mood_scores:
-            logger.error("RoBERTa model failed to generate predictions")
+            logger.error("ONNX model failed to generate predictions")
             return jsonify({
                 "error": "Model inference failed",
                 "success": False
@@ -144,7 +197,7 @@ def generate_mood_score():
             "top_emotions": top_emotions,
             "analyzed_text": text_to_analyze,
             "total_emotions": len(mood_scores),
-            "note": "Real emotion analysis using your trained RoBERTa model"
+            "note": "Real emotion analysis using your trained ONNX model"
         })
 
     except Exception as e:
@@ -159,22 +212,109 @@ def model_status():
     """Check model loading status"""
     return jsonify({
         "model_loaded": onnx_session is not None,
-        "status": "roberta_ready" if onnx_session else "model_failed",
-        "note": "Using real RoBERTa emotion analysis" if onnx_session else "RoBERTa model failed to load"
+        "tokenizer_loaded": tokenizer is not None,
+        "status": "onnx_ready" if onnx_session else "model_failed",
+        "note": "Using your trained ONNX emotion analysis model" if onnx_session else "ONNX model failed to load"
+    })
+
+@app.route('/debug-model', methods=['POST'])
+def debug_model():
+    """Debug endpoint to test model with specific text"""
+    try:
+        data = request.get_json()
+        text = data.get('text', 'I am feeling happy today!')
+        
+        if not onnx_session:
+            return jsonify({"error": "Model not loaded"}), 500
+            
+        # Get raw model outputs
+        inputs = tokenizer(text, return_tensors="np", padding=True, truncation=True, max_length=512)
+        input_names = [input.name for input in onnx_session.get_inputs()]
+        output_name = onnx_session.get_outputs()[0].name
+        
+        input_dict = {}
+        if 'input_ids' in input_names:
+            input_dict['input_ids'] = inputs['input_ids']
+        if 'attention_mask' in input_names:
+            input_dict['attention_mask'] = inputs['attention_mask']
+        
+        outputs = onnx_session.run([output_name], input_dict)
+        raw_scores = outputs[0][0]
+        
+        # Get model info
+        model_info = {
+            "input_names": input_names,
+            "output_names": [output.name for output in onnx_session.get_outputs()],
+            "input_shapes": {name: onnx_session.get_inputs()[i].shape for i, name in enumerate(input_names)},
+            "output_shapes": {name: onnx_session.get_outputs()[i].shape for i, name in enumerate(onnx_session.get_outputs())}
+        }
+        
+        return jsonify({
+            "text": text,
+            "raw_scores": raw_scores.tolist(),
+            "score_range": {"min": float(raw_scores.min()), "max": float(raw_scores.max())},
+            "model_info": model_info,
+            "tokenizer_info": {
+                "vocab_size": tokenizer.vocab_size,
+                "model_max_length": tokenizer.model_max_length
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Debug error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/test-mood', methods=['GET'])
+def test_mood():
+    """Test endpoint with different mood scenarios"""
+    test_cases = [
+        "I am feeling very happy and excited today!",
+        "I am feeling sad and disappointed about work",
+        "I am feeling angry and frustrated with the situation",
+        "I am feeling anxious and worried about the future",
+        "I am feeling grateful and content with my life"
+    ]
+    
+    results = []
+    for text in test_cases:
+        try:
+            mood_scores = roberta_emotion_analysis(text)
+            if mood_scores:
+                top_emotion = mood_scores[0]
+                results.append({
+                    "text": text,
+                    "top_emotion": top_emotion["emotion"],
+                    "confidence": top_emotion["confidence"]
+                })
+            else:
+                results.append({
+                    "text": text,
+                    "error": "Analysis failed"
+                })
+        except Exception as e:
+            results.append({
+                "text": text,
+                "error": str(e)
+            })
+    
+    return jsonify({
+        "test_results": results,
+        "note": "These are test cases to verify model behavior"
     })
 
 if __name__ == '__main__':
     # Start the server
     logger.info("🚀 Starting Mood Analysis Server...")
     
-    # Try to load RoBERTa model
+    # Try to load ONNX model
     if load_onnx_model():
-        logger.info("✅ Server ready! RoBERTa model loaded successfully.")
+        logger.info("✅ Server ready! Your ONNX model loaded successfully.")
     else:
-        logger.error("❌ Server failed to load RoBERTa model. Cannot start without model.")
+        logger.error("❌ ONNX model failed to load. Server cannot start without the model.")
+        logger.info("📝 Please ensure your model is placed at 'Backend/Models/model.onnx'")
         exit(1)
     
-    logger.info("📝 RoBERTa integration complete!")
+    logger.info("📝 Server starting with ONNX model capabilities...")
     
     # Run the server
     # Use 0.0.0.0 to make it accessible from other devices on the network
