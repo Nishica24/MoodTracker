@@ -157,7 +157,14 @@ export default function DashboardScreen() {
   }, []);
 
   // Generate dynamic stats based on mood scores
-  const getDynamicStats = () => {
+  const getDynamicStats = (): Array<{
+    icon: LucideIcon;
+    title: string;
+    value: string;
+    subtitle: string;
+    color: string;
+    trend: 'up' | 'stable' | 'down';
+  }> => {
     if (moodScores.length === 0) return [];
     
     const topEmotions = moodScores.slice(0, 5);
@@ -165,36 +172,44 @@ export default function DashboardScreen() {
     return [
       {
         icon: Heart,
-        title: 'Top Emotion',
-        value: topEmotions[0]?.emotion || 'N/A',
-        subtitle: `${Math.abs(topEmotions[0]?.confidence || 0).toFixed(2)} confidence`,
+        title: 'Social Health',
+        value: '8.2',
+        subtitle: '+0.5 from last week',
         color: '#EF4444',
-        trend: 'up' as const
+        trend: 'up'
+      },
+      {
+        icon: DollarSign,
+        title: 'Spending Wellness',
+        value: '$247',
+        subtitle: 'This week',
+        color: '#10B981',
+        trend: 'stable'
       },
       {
         icon: Zap,
-        title: 'Emotional Balance',
-        value: `${getMoodLevel(moodScores)}/10`,
-        subtitle: 'Based on RoBERTa analysis',
-        color: '#10B981',
-        trend: 'stable' as const
+        title: 'Work Stress',
+        value: '4.2/10',
+        subtitle: 'Moderate level',
+        color: '#F59E0B',
+        trend: 'down'
       },
       {
         icon: Moon,
-        title: 'Mood Stability',
-        value: `${moodScores.length} emotions`,
-        subtitle: 'Analyzed by AI model',
+        title: 'Sleep Quality',
+        value: '7.5h',
+        subtitle: 'Avg this week',
         color: '#8B5CF6',
-        trend: 'up' as const
+        trend: 'up'
       },
       {
-        icon: Smile,
-        title: 'Wellness Score',
-        value: `${Math.round((getMoodLevel(moodScores) / 10) * 100)}%`,
-        subtitle: 'Overall emotional health',
-        color: '#F59E0B',
-        trend: 'up' as const
-      }
+        icon: Smartphone,
+        title: 'Screen Time',
+        value: '4.2h',
+        subtitle: 'Today',
+        color: '#06B6D4',
+        trend: 'down'
+      },
     ];
   };
 
