@@ -67,40 +67,27 @@ const handleNext = async () => {
   if (step === 3) {
     setIsLoading(true); // Start loading indicator
     
-    try {
-      // Using your computer's IP address
-      const response = await fetch('http://192.168.1.10:5001/generate-mood-score', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          goals: formData.goals,
-          concerns: formData.concerns,
-        }),
-      });
+    if (formData) {
+      console.log('Successfully got selected options, ', formData);
+      console.log('Navigating to dashboard...');
 
-      const result = await response.json();
-      
-      if (response.ok) {
-        console.log('Successfully generated mood scores:', result.mood_scores);
-        console.log('Navigating to dashboard...');
+      // You can now store these scores in your app's state (e.g., using Zustand, Redux, or Context API)
+      // For now, we'll just log them and navigate.
+      router.push({
+        pathname: '/(tabs)',
+        params: { formData: JSON.stringify(formData) }
+      })
+    } else {
+      console.log('Some error occured with storing the selected options in formData, falling back to default values');
 
-        // You can now store these scores in your app's state (e.g., using Zustand, Redux, or Context API)
-        // For now, we'll just log them and navigate.
-        router.navigate('/(tabs)');
-      } else {
-        console.log('API Error:', result.error);
-        // Even if API fails, still navigate to dashboard
-        console.log('API failed, but navigating to dashboard anyway...');
-        router.navigate('/(tabs)');
+      const sampleFormData = {
+
+        name: 'John Doe',
+        age: 25,
+        goals: ['Improve mental health', 'Better sleep'],
+        concerns: ['Depression', 'Work stress']
+
       }
-
-    } catch (error) {
-      console.error('API call failed:', error);
-      // Even if API fails, still navigate to dashboard
-      console.log('API failed, but navigating to dashboard anyway...');
-      router.navigate('/(tabs)');
-    } finally {
-      setIsLoading(false); // Stop loading indicator
     }
   }
 };

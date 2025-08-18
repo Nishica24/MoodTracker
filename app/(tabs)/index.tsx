@@ -4,8 +4,14 @@ import { MoodCard } from '@/components/MoodCard';
 import { StatsCard } from '@/components/StatsCard';
 import { QuickActions } from '@/components/QuickActions';
 import { Smile, Heart, Zap, Moon, Smartphone, DollarSign, LucideIcon } from 'lucide-react-native';
+import { useLocalSearchParams } from 'expo-router'
 
 export default function DashboardScreen() {
+
+   const { formData } = useLocalSearchParams();
+
+   const parsedFormData: FormData = JSON.parse(formData as string);
+
   const [currentMood, setCurrentMood] = useState({
     emoji: '😊',
     label: 'Happy',
@@ -45,6 +51,9 @@ export default function DashboardScreen() {
 
   // Function to get mood level from confidence scores
   const getMoodLevel = (scores: any[]) => {
+
+    console.log('getMoodLevel:', scores)
+    
     if (scores.length === 0) return 5;
     
     // Get the top emotion score and convert to 1-10 scale
@@ -62,6 +71,9 @@ export default function DashboardScreen() {
 
   // Function to get mood label from top emotion
   const getMoodLabel = (emotion: string) => {
+
+    console.log('getMoodLabel:', emotion)
+
     const labelMap: { [key: string]: string } = {
       'joy': 'Joyful',
       'happiness': 'Happy',
@@ -82,7 +94,8 @@ export default function DashboardScreen() {
       'confusion': 'Confused',
       'surprise': 'Surprised',
       'disappointment': 'Disappointed',
-      'nervousness': 'Nervous'
+      'nervousness': 'Nervous',
+      'desire':'horny'
     };
     return labelMap[emotion.toLowerCase()] || 'Balanced';
   };
@@ -93,16 +106,16 @@ export default function DashboardScreen() {
       try {
         // For demo purposes, we'll use sample data
         // In production, you'd fetch from your API endpoint
-        const sampleMoodData = {
-          goals: ['Improve mental health', 'Better sleep'],
-          concerns: ['Depression', 'Work stress']
-        };
+        // const sampleMoodData = {
+        //   goals: ['Improve mental health', 'Better sleep'],
+        //   concerns: ['Depression', 'Work stress']
+        // };
 
         // Call your RoBERTa API
-        const response = await fetch('http://192.168.1.10:5001/generate-mood-score', {
+        const response = await fetch('http://localhost:5001/generate-mood-score', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(sampleMoodData),
+          body: JSON.stringify(parsedFormData),
         });
 
         if (response.ok) {
@@ -112,11 +125,21 @@ export default function DashboardScreen() {
           // Update current mood based on RoBERTa results
           if (result.mood_scores && result.mood_scores.length > 0) {
             const topEmotion = result.mood_scores[0];
+            console.log(topEmotion)
             const newMood = {
               emoji: getEmojiForEmotion(topEmotion.emotion),
               label: getMoodLabel(topEmotion.emotion),
               level: getMoodLevel(result.mood_scores),
-              date: new Date().toLocaleString()
+              date: new Date().toLocaleString("en-GB", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: false, // 24-hour format
+              })
+
             };
             setCurrentMood(newMood);
           }
