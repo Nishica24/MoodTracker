@@ -190,6 +190,7 @@ def generate_mood_score():
         
         # Get top 5 emotions
         top_emotions = mood_scores[:5]
+        # logger.info(mood_scores)
         
         return jsonify({
             "success": True,
