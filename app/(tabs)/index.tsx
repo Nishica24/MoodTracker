@@ -4,7 +4,7 @@ import { MoodCard } from '@/components/MoodCard';
 import { StatsCard } from '@/components/StatsCard';
 import { QuickActions } from '@/components/QuickActions';
 import { Smile, Heart, Zap, Moon, Smartphone, DollarSign, LucideIcon } from 'lucide-react-native';
-import { useLocalSearchParams } from 'expo-router'
+import { useLocalSearchParams, router } from 'expo-router'
 
 export default function DashboardScreen() {
 
@@ -164,6 +164,7 @@ export default function DashboardScreen() {
     subtitle: string;
     color: string;
     trend: 'up' | 'stable' | 'down';
+    onPress?: () => void;
   }> => {
     if (moodScores.length === 0) return [];
     
@@ -176,7 +177,8 @@ export default function DashboardScreen() {
         value: '8.2',
         subtitle: '+0.5 from last week',
         color: '#EF4444',
-        trend: 'up'
+        trend: 'up',
+        onPress: () => router.push('/social-health')
       },
       {
         icon: DollarSign,
@@ -184,7 +186,8 @@ export default function DashboardScreen() {
         value: '$247',
         subtitle: 'This week',
         color: '#10B981',
-        trend: 'stable'
+        trend: 'stable',
+        onPress: () => router.push('/spending-wellness')
       },
       {
         icon: Zap,
@@ -192,7 +195,8 @@ export default function DashboardScreen() {
         value: '4.2/10',
         subtitle: 'Moderate level',
         color: '#F59E0B',
-        trend: 'down'
+        trend: 'down',
+        onPress: () => router.push('/work-stress')
       },
       {
         icon: Moon,
@@ -200,7 +204,8 @@ export default function DashboardScreen() {
         value: '7.5h',
         subtitle: 'Avg this week',
         color: '#8B5CF6',
-        trend: 'up'
+        trend: 'up',
+        onPress: () => router.push('/sleep-quality')
       },
       {
         icon: Smartphone,
@@ -208,7 +213,8 @@ export default function DashboardScreen() {
         value: '4.2h',
         subtitle: 'Today',
         color: '#06B6D4',
-        trend: 'down'
+        trend: 'down',
+        onPress: () => router.push('/screen-time')
       },
     ];
   };
@@ -230,7 +236,7 @@ export default function DashboardScreen() {
             <Text style={styles.sectionTitle}>Your Wellness Overview</Text>
             <View style={styles.statsGrid}>
               {stats.map((stat, index) => (
-                <StatsCard key={index} {...stat} />
+                <StatsCard key={index} {...stat} onPress={stat.onPress} />
               ))}
             </View>
           </View>

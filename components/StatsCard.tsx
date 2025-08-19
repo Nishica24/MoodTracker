@@ -9,9 +9,10 @@ interface StatsCardProps {
   subtitle: string;
   color: string;
   trend: 'up' | 'down' | 'stable';
+  onPress?: () => void;
 }
 
-export function StatsCard({ icon: Icon, title, value, subtitle, color, trend }: StatsCardProps) {
+export function StatsCard({ icon: Icon, title, value, subtitle, color, trend, onPress }: StatsCardProps) {
   const getTrendIcon = () => {
     switch (trend) {
       case 'up':
@@ -35,7 +36,7 @@ export function StatsCard({ icon: Icon, title, value, subtitle, color, trend }: 
   };
 
   return (
-    <TouchableOpacity style={styles.card}>
+    <TouchableOpacity style={styles.card} onPress={onPress}>
       <View style={styles.header}>
         <View style={[styles.iconContainer, { backgroundColor: color + '20' }]}>
           <Icon size={20} color={color} />
