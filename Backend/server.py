@@ -2,7 +2,9 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import logging
 import os
-
+from datetime import datetime
+from flask_pymongo import PyMongo
+from bson.objectid import ObjectId
 # Add ONNX runtime imports
 import onnxruntime as ort
 import numpy as np
@@ -14,6 +16,14 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for mobile app
+
+# Configure MongoDB URI for flask_pymongo
+app.config["MONGO_URI"] = "mongodb+srv://nishica22210402:UW1Gy7gzbdwPR0WG@cluster0.0gblwuc.mongodb.net/Mood_Tracker?retryWrites=true&w=majority&appName=Cluster0"
+mongo = PyMongo(app)
+
+# Get database and collection references
+db = mongo.db
+collection = db.MT  # collection (like a table)
 
 # Global variables for ONNX model
 onnx_session = None
@@ -302,6 +312,61 @@ def test_mood():
         "test_results": results,
         "note": "These are test cases to verify model behavior"
     })
+
+    # --- NEW: Database Endpoints for Logging and Retrieving Mood/Activity Data ---
+
+@app.route('/log-activity', methods=['POST'])
+def log_activity():
+    """Receives and stores mood score and call log metrics from the mobile app."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid JSON"}), 400
+
+    user_id = data.get('userId')
+    mood_score = data.get('moodScore')
+    activity_data = data.get('activityData')
+
+    if not all([user_id, mood_score is not None, activity_data]):
+        return jsonify({"error": "Missing required fields: userId, moodScore, activityData"}), 400
+
+    # The 'activity_logs' collection will be created automatically if it doesn't exist
+    activity_logs_collection = mongo.db.activity_logs
+    try:
+        # Insert the complete data payload into the collection
+        result = activity_logs_collection.insert_one({
+            "userId": user_id,
+            "moodScore": mood_score,
+            "activityData": activity_data,
+            "timestamp": datetime.utcnow()
+        })
+        logger.info(f"Logged activity for user {user_id} with db id {result.inserted_id}")
+        # Convert ObjectId to string for the JSON response
+        return jsonify({"message": "Activity logged successfully!", "id": str(result.inserted_id)}), 201
+    except Exception as e:
+        logger.error(f"Database error on /log-activity: {e}")
+        return jsonify({"error": "Could not save log entry"}), 500
+
+@app.route('/get-activity-logs/<userId>', methods=['GET'])
+def get_activity_logs(userId):
+    if not userId:
+        return jsonify({"error": "User ID is required"}), 400
+
+    try:
+        activity_logs_collection = mongo.db.activity_logs
+        # Find all documents matching the userId and sort by timestamp descending
+        logs = activity_logs_collection.find({"userId": userId}).sort("timestamp", -1)
+        
+        results = []
+        for log in logs:
+            # Important: Convert the '_id' (ObjectId) to a string to make it JSON serializable
+            log['_id'] = str(log['_id'])
+            results.append(log)
+
+        logger.info(f"Retrieved {len(results)} logs for user {userId}")
+        return jsonify(results), 200
+    except Exception as e:
+        logger.error(f"Database error on /get-activity-logs: {e}")
+        return jsonify({"error": "Could not retrieve logs"}), 500
 
 if __name__ == '__main__':
     # Start the server
