@@ -10,7 +10,7 @@ export default function DashboardScreen() {
 
    const { formData } = useLocalSearchParams();
 
-   const parsedFormData: FormData = JSON.parse(formData as string);
+   const parsedFormData = JSON.parse(formData as string);
 
   const [currentMood, setCurrentMood] = useState({
     emoji: '😊',
@@ -100,62 +100,32 @@ export default function DashboardScreen() {
     return labelMap[emotion.toLowerCase()] || 'Balanced';
   };
 
-  // Fetch mood data from your RoBERTa API
+  // ✅ use passed data instead of fetching
   useEffect(() => {
-    const fetchMoodData = async () => {
-      try {
-        // For demo purposes, we'll use sample data
-        // In production, you'd fetch from your API endpoint
-        // const sampleMoodData = {
-        //   goals: ['Improve mental health', 'Better sleep'],
-        //   concerns: ['Depression', 'Work stress']
-        // };
+    if (parsedFormData && parsedFormData.mood_scores) {
+      setMoodScores(parsedFormData.mood_scores);
 
-        // Call your RoBERTa API
-        const response = await fetch('http://localhost:5001/generate-mood-score', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(parsedFormData),
+      const topEmotion = parsedFormData.mood_scores[0];
+      if (topEmotion) {
+        setCurrentMood({
+          emoji: getEmojiForEmotion(topEmotion.emotion),
+          label: getMoodLabel(topEmotion.emotion),
+          level: getMoodLevel(parsedFormData.mood_scores),
+          date: new Date().toLocaleString("en-GB", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+          }),
         });
-
-        if (response.ok) {
-          const result = await response.json();
-          setMoodScores(result.mood_scores || []);
-          
-          // Update current mood based on RoBERTa results
-          if (result.mood_scores && result.mood_scores.length > 0) {
-            const topEmotion = result.mood_scores[0];
-            console.log(topEmotion)
-            const newMood = {
-              emoji: getEmojiForEmotion(topEmotion.emotion),
-              label: getMoodLabel(topEmotion.emotion),
-              level: getMoodLevel(result.mood_scores),
-              date: new Date().toLocaleString("en-GB", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit",
-                hour12: false, // 24-hour format
-              })
-
-            };
-            setCurrentMood(newMood);
-          }
-        } else {
-          console.log('Failed to fetch mood data');
-        }
-      } catch (error) {
-        console.error('Error fetching mood data:', error);
-      } finally {
-        setIsLoading(false);
       }
-    };
+    }
+  }, [parsedFormData]);
 
-    fetchMoodData();
-  }, []);
-
+  
   // Generate dynamic stats based on mood scores
   const getDynamicStats = (): Array<{
     icon: LucideIcon;
@@ -178,7 +148,7 @@ export default function DashboardScreen() {
         subtitle: '+0.5 from last week',
         color: '#EF4444',
         trend: 'up',
-        onPress: () => router.push('/social-health')
+        onPress: () => router.push('./social-health')
       },
       {
         icon: DollarSign,
@@ -187,7 +157,7 @@ export default function DashboardScreen() {
         subtitle: 'This week',
         color: '#10B981',
         trend: 'stable',
-        onPress: () => router.push('/spending-wellness')
+        onPress: () => router.push('./spending-wellness')
       },
       {
         icon: Zap,
@@ -196,7 +166,7 @@ export default function DashboardScreen() {
         subtitle: 'Moderate level',
         color: '#F59E0B',
         trend: 'down',
-        onPress: () => router.push('/work-stress')
+        onPress: () => router.push('./work-stress')
       },
       {
         icon: Moon,
@@ -205,7 +175,7 @@ export default function DashboardScreen() {
         subtitle: 'Avg this week',
         color: '#8B5CF6',
         trend: 'up',
-        onPress: () => router.push('/sleep-quality')
+        onPress: () => router.push('./sleep-quality')
       },
       {
         icon: Smartphone,
@@ -214,7 +184,7 @@ export default function DashboardScreen() {
         subtitle: 'Today',
         color: '#06B6D4',
         trend: 'down',
-        onPress: () => router.push('/screen-time')
+        onPress: () => router.push('./screen-time')
       },
     ];
   };
@@ -230,7 +200,7 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.content}>
-          <MoodCard mood={currentMood} />
+          <MoodCard mood={currentMood}/>
           
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Your Wellness Overview</Text>

@@ -65,18 +65,34 @@ const handleNext = async () => {
 
   // On the final step, call the backend
   if (step === 3) {
+
     setIsLoading(true); // Start loading indicator
     
     if (formData) {
       console.log('Successfully got selected options, ', formData);
-      console.log('Navigating to dashboard...');
 
-      // You can now store these scores in your app's state (e.g., using Zustand, Redux, or Context API)
-      // For now, we'll just log them and navigate.
-      router.push({
-        pathname: '/(tabs)',
-        params: { formData: JSON.stringify(formData) }
-      })
+      console.log("Calling the API...")
+
+      const response = await fetch('http://localhost:5001/generate-mood-score', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+        });
+
+        if(response.ok) {
+
+          console.log('received successfull response')
+          const result = await response.json()
+
+          console.log('Navigating to dashboard...');
+
+          // You can now store these scores in your app's state (e.g., using Zustand, Redux, or Context API)
+          // For now, we'll just log them and navigate.
+          router.push({
+          pathname: '/(tabs)',
+          params: { formData: JSON.stringify(result) }
+          })
+        }
     } else {
       console.log('Some error occured with storing the selected options in formData, falling back to default values');
 
@@ -88,6 +104,27 @@ const handleNext = async () => {
         concerns: ['Depression', 'Work stress']
 
       }
+
+      const response = await fetch('http://localhost:5001/generate-mood-score', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(sampleFormData),
+        });
+
+        if(response.ok) {
+
+          console.log('received successfull sample data response')
+          const result = await response.json()
+
+          console.log('Navigating to dashboard...');
+
+          // You can now store these scores in your app's state (e.g., using Zustand, Redux, or Context API)
+          // For now, we'll just log them and navigate.
+          router.push({
+          pathname: '/(tabs)',
+          params: { formData: JSON.stringify(result) }
+          })
+        }
     }
   }
 };
