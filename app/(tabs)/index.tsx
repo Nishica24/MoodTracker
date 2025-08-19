@@ -94,8 +94,7 @@ export default function DashboardScreen() {
       'confusion': 'Confused',
       'surprise': 'Surprised',
       'disappointment': 'Disappointed',
-      'nervousness': 'Nervous',
-      'desire':'horny'
+      'nervousness': 'Nervous'
     };
     return labelMap[emotion.toLowerCase()] || 'Balanced';
   };
