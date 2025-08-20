@@ -5,6 +5,7 @@ import { CircleCheck as CheckCircle, ArrowRight, User, Target, Activity } from '
 
 export default function OnboardingScreen() {
   const [step, setStep] = useState(1);
+
   type FormData = {
     name: string;
     age: string;
@@ -18,8 +19,10 @@ export default function OnboardingScreen() {
     goals: [],
     concerns: [],
   });
+
   const [isLoading, setIsLoading] = useState(false);
 
+  // Goals & Concerns (frontend wording kept same, backend handles normalization)
   const goals = [
     'Improve mental health',
     'Better sleep',
@@ -56,80 +59,45 @@ export default function OnboardingScreen() {
     }));
   };
 
-  // ...existing code...
-const handleNext = async () => {
-  if (step < 3) {
-    setStep(step + 1);
-    return;
-  }
+  const handleNext = async () => {
+    if (step < 3) {
+      setStep(step + 1);
+      return;
+    }
 
-  // On the final step, call the backend
-  if (step === 3) {
+    if (step === 3) {
+      setIsLoading(true);
 
-    setIsLoading(true); // Start loading indicator
-    
-    if (formData) {
-      console.log('Successfully got selected options, ', formData);
+      try {
+        console.log('Submitting formData: ', formData);
 
-      console.log("Calling the API...")
-
-      const response = await fetch('http://localhost:5001/generate-mood-score', {
+        // IMPORTANT: change 10.0.2.2 to your IP if testing on device
+        const response = await fetch('http://localhost:5000/generate-mood-score', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData),
         });
 
-        if(response.ok) {
+        if (!response.ok) throw new Error("Backend error");
 
-          console.log('received successfull response')
-          const result = await response.json()
+        const result = await response.json();
+        console.log('API result', result);
 
-          console.log('Navigating to dashboard...');
-
-          // You can now store these scores in your app's state (e.g., using Zustand, Redux, or Context API)
-          // For now, we'll just log them and navigate.
-          router.push({
-          pathname: '/(tabs)',
-          params: { formData: JSON.stringify(result) }
-          })
-        }
-    } else {
-      console.log('Some error occured with storing the selected options in formData, falling back to default values');
-
-      const sampleFormData = {
-
-        name: 'John Doe',
-        age: 25,
-        goals: ['Improve mental health', 'Better sleep'],
-        concerns: ['Depression', 'Work stress']
-
-      }
-
-      const response = await fetch('http://localhost:5001/generate-mood-score', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(sampleFormData),
+        router.push({
+          pathname: '/(tabs)/dashboard',
+          params: { result: JSON.stringify(result) }
         });
 
-        if(response.ok) {
-
-          console.log('received successfull sample data response')
-          const result = await response.json()
-
-          console.log('Navigating to dashboard...');
-
-          // You can now store these scores in your app's state (e.g., using Zustand, Redux, or Context API)
-          // For now, we'll just log them and navigate.
-          router.push({
-          pathname: '/(tabs)',
-          params: { formData: JSON.stringify(result) }
-          })
-        }
+      } catch (error: any) {
+        console.error(error);
+        Alert.alert("Error", "Could not connect to backend. Check network/IP.");
+      } finally {
+        setIsLoading(false);
+      }
     }
-  }
-};
+  };
 
-
+  // Step renderers
   const renderStep1 = () => (
     <View style={styles.stepContent}>
       <User size={48} color="#6366F1" style={styles.stepIcon} />
@@ -235,7 +203,7 @@ const handleNext = async () => {
         {step === 2 && renderStep2()}
         {step === 3 && renderStep3()}
 
-         <TouchableOpacity 
+        <TouchableOpacity 
           style={[styles.nextButton, isLoading && styles.buttonDisabled]} 
           onPress={handleNext}
           disabled={isLoading}
@@ -251,118 +219,25 @@ const handleNext = async () => {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  progressContainer: {
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 32,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#6366F1',
-  },
-  progressText: {
-    textAlign: 'center',
-    marginTop: 8,
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  stepContent: {
-    paddingHorizontal: 24,
-    alignItems: 'center',
-  },
-  stepIcon: {
-    marginBottom: 24,
-  },
-  stepTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#1F2937',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  stepSubtitle: {
-    fontSize: 16,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 32,
-  },
-  inputGroup: {
-    width: '100%',
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  textInput: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  optionsContainer: {
-    width: '100%',
-    gap: 12,
-  },
-  optionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'white',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  optionButtonSelected: {
-    backgroundColor: '#6366F1',
-    borderColor: '#6366F1',
-  },
-  optionText: {
-    fontSize: 16,
-    color: '#374151',
-    fontWeight: '500',
-  },
-  optionTextSelected: {
-    color: 'white',
-  },
-  nextButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#6366F1',
-    borderRadius: 12,
-    paddingVertical: 16,
-    marginHorizontal: 24,
-    marginTop: 32,
-    marginBottom: 24,
-    gap: 8,
-  },
-  nextButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  buttonDisabled: { opacity: 0.6 },
+  scrollView: { flex: 1 },
+  progressContainer: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 32 },
+  progressBar: { height: 4, backgroundColor: '#E5E7EB', borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: '#6366F1' },
+  progressText: { textAlign: 'center', marginTop: 8, fontSize: 14, color: '#6B7280' },
+  stepContent: { paddingHorizontal: 24, alignItems: 'center' },
+  stepIcon: { marginBottom: 24 },
+  stepTitle: { fontSize: 28, fontWeight: '700', color: '#1F2937', textAlign: 'center', marginBottom: 8 },
+  stepSubtitle: { fontSize: 16, color: '#6B7280', textAlign: 'center', marginBottom: 32 },
+  inputGroup: { width: '100%', marginBottom: 20 },
+  label: { fontSize: 16, fontWeight: '600', color: '#374151', marginBottom: 8 },
+  textInput: { backgroundColor: 'white', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, borderWidth: 1, borderColor: '#E5E7EB' },
+  optionsContainer: { width: '100%', gap: 12 },
+  optionButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'white', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 16, borderWidth: 1, borderColor: '#E5E7EB' },
+  optionButtonSelected: { backgroundColor: '#6366F1', borderColor: '#6366F1' },
+  optionText: { fontSize: 16, color: '#374151', fontWeight: '500' },
+  optionTextSelected: { color: 'white' },
+  nextButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#6366F1', borderRadius: 12, paddingVertical: 16, marginHorizontal: 24, marginTop: 32, marginBottom: 24, gap: 8 },
+  nextButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
 });

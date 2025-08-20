@@ -3,15 +3,13 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Plus, TrendingUp } from 'lucide-react-native';
 
 interface MoodCardProps {
-  mood: {
-    emoji: string;
-    label: string;
-    level: number;
-    date: string;
-  };
+  emoji: string;
+  label: string;
+  level: number;
+  date: string;
 }
 
-export function MoodCard({ mood }: MoodCardProps) {
+export function MoodCard({ emoji, label, level, date }: MoodCardProps) {
   return (
     <View style={styles.card}>
       <View style={styles.header}>
@@ -22,20 +20,20 @@ export function MoodCard({ mood }: MoodCardProps) {
       </View>
 
       <View style={styles.moodDisplay}>
-        <Text style={styles.emoji}>{mood.emoji}</Text>
+        <Text style={styles.emoji}>{emoji}</Text>
         <View style={styles.moodInfo}>
-          <Text style={styles.moodLabel}>{mood.label}</Text>
-          <Text style={styles.moodDate}>{mood.date}</Text>
+          <Text style={styles.moodLabel}>{label}</Text>
+          <Text style={styles.moodDate}>{date}</Text>
         </View>
       </View>
 
       <View style={styles.levelContainer}>
         <Text style={styles.levelLabel}>Mood Level</Text>
         <View style={styles.levelBar}>
-          <View style={[styles.levelFill, { width: `${(mood.level / 10) * 100}%` }]} />
+          <View style={[styles.levelFill, { width: `${(level / 10) * 100}%` }]} />
         </View>
         <View style={styles.levelIndicator}>
-          <Text style={styles.levelText}>{mood.level}/10</Text>
+          <Text style={styles.levelText}>{level}/10</Text>
           <View style={styles.trendContainer}>
             <TrendingUp size={16} color="#10B981" />
             <Text style={styles.trendText}>+0.5</Text>

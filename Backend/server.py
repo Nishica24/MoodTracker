@@ -8,11 +8,16 @@ from bson.objectid import ObjectId
 # Add ONNX runtime imports
 import onnxruntime as ort
 import numpy as np
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoConfig # AutoConfig added
+from typing import List, Dict, Any, Optional, Tuple
+
+# HF API
+import requests
 
 # Set up basic logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+# label_list: Optional[List[str]] = None
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for mobile app
@@ -25,9 +30,10 @@ mongo = PyMongo(app)
 db = mongo.db
 collection = db.MT  # collection (like a table)
 
-# Global variables for ONNX model
+#Global variables for ONNX model
 onnx_session = None
 tokenizer = None
+label_list: Optional[List[str]] = None # Populated from HF config if available
 
 # Real RoBERTa emotion classifier
 def roberta_emotion_analysis(text):
@@ -139,8 +145,11 @@ def load_onnx_model():
     except Exception as e:
         logger.error(f"❌ Error loading ONNX model: {e}")
         return False
+#--------------------------------------------------------------------------------------
 
 
+
+# --------------------------------------------------------------------------------
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -200,16 +209,50 @@ def generate_mood_score():
         
         # Get top 5 emotions
         top_emotions = mood_scores[:5]
-        # logger.info(mood_scores)
-        
+
+        # --- NEW: Simplified Mood Output ---
+        top_emotion = top_emotions[0]
+        mood = top_emotion["emotion"]
+        confidence = top_emotion["confidence"]
+
+        # Map emotion to emoji
+        emotion_to_emoji = {
+            "joy": "😊",
+            "gratitude": "🙏",
+            "love": "❤️",
+            "anger": "😡",
+            "sadness": "😢",
+            "fear": "😨",
+            "surprise": "😲",
+            "disgust": "🤢",
+            "neutral": "😐",
+            "excitement": "🤩",
+            "pride": "😎",
+            "relief": "😌",
+            "nervousness": "😬",
+            "confusion": "😕",
+            "optimism": "🌈",
+            "grief": "💔"
+        }
+        emoji = emotion_to_emoji.get(mood, "🙂")  # default fallback
+
+        # Convert confidence (0–1) into level (1–10 scale)
+        mood_level = max(1, min(10, round(confidence * 10)))
+
         return jsonify({
             "success": True,
             "mood_scores": mood_scores,
             "top_emotions": top_emotions,
             "analyzed_text": text_to_analyze,
             "total_emotions": len(mood_scores),
-            "note": "Real emotion analysis using your trained ONNX model"
+            "note": "Real emotion analysis using your trained ONNX model",
+
+            # --- NEW simplified output ---
+            "mood": mood,
+            "mood_level": mood_level,
+            "emoji": emoji
         })
+
 
     except Exception as e:
         logger.error(f"Error during prediction: {e}")
@@ -217,6 +260,73 @@ def generate_mood_score():
             "error": f"Failed to generate mood score: {str(e)}",
             "success": False
         }), 500
+
+# ------------------------------------------------------------------------------------------------------------------
+# # New Code 
+# @app.route('/generate-mood-score', methods=['POST'])
+# def generate_mood_score():
+#     """Generate mood scores based on user goals and concerns (improved scoring logic)"""
+#     try:
+#         data = request.get_json()
+#         if not data:
+#             return jsonify({"error": "No data provided"}), 400
+
+#         goals = data.get('goals', [])
+#         concerns = data.get('concerns', [])
+#         if not goals and not concerns:
+#             return jsonify({"error": "At least one goal or concern is required"}), 400
+
+#         # Combine goals and concerns for text analysis
+#         text_to_analyze = " ".join(goals + concerns)
+
+#         if not onnx_session:
+#             return jsonify({"error": "ONNX model not loaded", "success": False}), 500
+
+#         mood_scores = roberta_emotion_analysis(text_to_analyze)
+#         if not mood_scores:
+#             return jsonify({"error": "Model inference failed", "success": False}), 500
+
+#         # ---------------- Improved total_score logic ----------------
+#         positive_emotions = ["joy", "gratitude", "love", "optimism", "pride", "relief", "excitement"]
+#         negative_emotions = ["anger", "sadness", "fear", "disgust", "grief", "nervousness", "confusion"]
+
+#         total_score = 0.0
+#         for item in mood_scores:
+#             emotion = item['emotion']
+#             confidence = item['confidence']
+#             # Give stronger weight to top-ranked emotions
+#             weight = abs(confidence) ** 1.5  # exaggerate high-confidence emotions
+#             if emotion in positive_emotions:
+#                 total_score += weight
+#             elif emotion in negative_emotions:
+#                 total_score -= weight
+#             # Ignore neutral/other emotions in score calculation
+
+#         # Set dynamic thresholds to reduce neutral bias
+#         if total_score > 0.3:
+#             mood = "happy"
+#             emoji = "😊"
+#         elif total_score < -0.3:
+#             mood = "sad"
+#             emoji = "😢"
+#         else:
+#             mood = "neutral"
+#             emoji = "😐"
+
+#         return jsonify({
+#             "success": True,
+#             "mood_scores": mood_scores,
+#             "analyzed_text": text_to_analyze,
+#             "mood": mood,
+#             "emoji": emoji,
+#             "goals": goals,
+#             "concerns": concerns
+#         })
+
+#     except Exception as e:
+#         logger.error(f"Error during prediction: {e}")
+#         return jsonify({"error": str(e), "success": False}), 500
+
 
 @app.route('/model-status', methods=['GET'])
 def model_status():
