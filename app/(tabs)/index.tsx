@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, Alert } from 'react-native';
-import { MoodCard } from '@/components/MoodCard';
+import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
 import { StatsCard } from '@/components/StatsCard';
 import { QuickActions } from '@/components/QuickActions';
-import { Smile, Heart, Zap, Moon, Smartphone, DollarSign, LucideIcon } from 'lucide-react-native';
+import { Heart, Zap, Moon, Smartphone, DollarSign, LucideIcon, Plus, TrendingUp } from 'lucide-react-native';
 import { useLocalSearchParams, router } from 'expo-router'
 
 export default function DashboardScreen() {
@@ -11,120 +10,12 @@ export default function DashboardScreen() {
    const { result } = useLocalSearchParams();  // ✅ Changed to match your dashboard
    const data = result ? JSON.parse(result as string) : null;  // ✅ Added this line
 
-  const [currentMood, setCurrentMood] = useState({
-    emoji: '😊',
-    label: 'Happy',
-    level: 7,
-    date: 'Today, 2:30 PM'
-  });
-  
   const [moodScores, setMoodScores] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  // Function to get emoji based on top emotion
-  const getEmojiForEmotion = (emotion: string) => {
-    const emojiMap: { [key: string]: string } = {
-      'joy': '  ',
-      'happiness': '😄',
-      'optimism': '😌',
-      'love': '  ',
-      'gratitude': '🙏',
-      'excitement': '  ',
-      'pride': '😎',
-      'relief': '  ',
-      'sadness': '😢',
-      'fear': '  ',
-      'anger': '  ',
-      'anxiety': '😰',
-      'stress': '😰',
-      'depression': '  ',
-      'grief': '  ',
-      'neutral': '  ',
-      'confusion': '😕',
-      'surprise': '😲',
-      'disappointment': '😞',
-      'nervousness': '  '
-    };
-    return emojiMap[emotion.toLowerCase()] || '😊';
-  };
-
-  // Function to get mood level from confidence scores
-  const getMoodLevel = (scores: any[]) => {
-
-    console.log('getMoodLevel:', scores)
-    
-    if (scores.length === 0) return 5;
-    
-    // Get the top emotion score and convert to 1-10 scale
-    const topScore = scores[0];
-    const confidence = Math.abs(topScore.confidence);
-    
-    // Convert confidence to mood level (1-10)
-    // Higher confidence = higher mood level
-    if (topScore.confidence > 0) {
-      return Math.min(10, Math.max(1, Math.round(confidence * 10)));
-    } else {
-      return Math.min(10, Math.max(1, Math.round((1 - confidence) * 5)));
-    }
-  };
-
-  // Function to get mood label from top emotion
-  const getMoodLabel = (emotion: string) => {
-
-    console.log('getMoodLabel:', emotion)
-
-    const labelMap: { [key: string]: string } = {
-      'joy': 'Joyful',
-      'happiness': 'Happy',
-      'optimism': 'Optimistic',
-      'love': 'Loving',
-      'gratitude': 'Grateful',
-      'excitement': 'Excited',
-      'pride': 'Proud',
-      'relief': 'Relieved',
-      'sadness': 'Sad',
-      'fear': 'Fearful',
-      'anger': 'Angry',
-      'anxiety': 'Anxious',
-      'stress': 'Stressed',
-      'depression': 'Depressed',
-      'grief': 'Grieving',
-      'neutral': 'Neutral',
-      'confusion': 'Confused',
-      'surprise': 'Surprised',
-      'disappointment': 'Disappointed',
-      'nervousness': 'Nervous'
-    };
-    return labelMap[emotion.toLowerCase()] || 'Balanced';
-  };
 
   // ✅ Updated useEffect to work with your dashboard data
   useEffect(() => {
     if (data) {
-      // Update currentMood with the data from your dashboard
-      setCurrentMood({
-        emoji: data.emoji || '😊',
-        label: data.mood || 'Neutral',
-        level: data.mood_level || 5,
-        date: data.timestamp ? new Date(data.timestamp).toLocaleString("en-GB", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: false,
-        }) : new Date().toLocaleString("en-GB", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: false,
-        }),
-      });
-
       // Create mock mood_scores for compatibility with existing code
       const mockMoodScores = [{
         emotion: data.mood?.toLowerCase() || 'neutral',
@@ -150,8 +41,6 @@ export default function DashboardScreen() {
     onPress?: () => void;
   }> => {
     if (moodScores.length === 0) return [];
-    
-    const topEmotions = moodScores.slice(0, 5);
     
     return [
       {
@@ -207,39 +96,81 @@ export default function DashboardScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* ✅ Dashboard Section - Added from your dashboard code */}
-        <View style={styles.dashboardSection}>
-          <Text style={styles.dashboardTitle}>Your Mood Analysis</Text>
-          {data ? (
-            <>
-              <Text style={styles.moodText}>
-                Mood: {data.mood} {data.emoji}
-              </Text>
-              <Text style={styles.detail}>Mood Level: {data.mood_level}</Text>
-              <Text style={styles.detail}>Timestamp: {data.timestamp}</Text>
-            </>
-          ) : (
-            <Text style={styles.noDataText}>No data received</Text>
-          )}
-        </View>
-
         <View style={styles.header}>
           <Text style={styles.greeting}>Good afternoon!</Text>
           <Text style={styles.subtitle}>How are you feeling today?</Text>
         </View>
 
-        {/* Mood Card */}
-        <MoodCard
-          emoji={currentMood.emoji}
-          label={currentMood.label}
-          level={currentMood.level}
-          date={currentMood.date}
-        />
+        {/* Current Mood Card - Integrated with your backend data */}
+        <View style={styles.moodCard}>
+          <View style={styles.moodCardHeader}>
+            <Text style={styles.moodCardTitle}>Current Mood</Text>
+            <TouchableOpacity style={styles.addButton}>
+              <Plus size={20} color="#6366F1" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.moodDisplay}>
+            <Text style={styles.moodEmoji}>
+              {data?.emoji || '😊'}
+            </Text>
+            <View style={styles.moodInfo}>
+              <Text style={styles.moodLabel}>
+                {data?.mood || 'Neutral'}
+              </Text>
+              <Text style={styles.moodDate}>
+                {data?.timestamp ? new Date(data.timestamp).toLocaleString("en-GB", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: false,
+                }) : 'Today, 03:16'}
+              </Text>
+            </View>
+          </View>
+
+          {/* AI Analysis Section */}
+          <View style={styles.aiAnalysisSection}>
+            <Text style={styles.aiAnalysisTitle}>AI Analysis</Text>
+            <Text style={styles.aiAnalysisPrimary}>
+              Primary: {data?.mood || 'Neutral'} ({data?.mood_level ? Math.round((data.mood_level / 10) * 100) : 80}%)
+            </Text>
+            <View style={styles.aiAnalysisTag}>
+              <Text style={styles.aiAnalysisTagText}>
+                {data?.mood || 'Neutral'} {data?.mood_level ? Math.round((data.mood_level / 10) * 100) : 80}%
+              </Text>
+            </View>
+          </View>
+
+          {/* Mood Level Section */}
+          <View style={styles.moodLevelSection}>
+            <Text style={styles.moodLevelTitle}>Mood Level</Text>
+            <View style={styles.moodLevelBar}>
+              <View 
+                style={[
+                  styles.moodLevelFill, 
+                  { width: `${((data?.mood_level || 5) / 10) * 100}%` }
+                ]} 
+              />
+            </View>
+            <View style={styles.moodLevelIndicator}>
+              <Text style={styles.moodLevelText}>
+                {data?.mood_level || 5}/10
+              </Text>
+              <View style={styles.trendContainer}>
+                <TrendingUp size={16} color="#10B981" />
+                <Text style={styles.trendText}>+0.5</Text>
+              </View>
+            </View>
+          </View>
+        </View>
 
         {/* Stats Cards */}
         <View style={styles.statsContainer}>
           <Text style={styles.sectionTitle}>Your Wellness Stats</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScroll}>
+          <View style={styles.statsGrid}>
             {stats.map((stat, index) => (
               <StatsCard
                 key={index}
@@ -252,7 +183,7 @@ export default function DashboardScreen() {
                 onPress={stat.onPress}
               />
             ))}
-          </ScrollView>
+          </View>
         </View>
 
         {/* Quick Actions */}
@@ -266,47 +197,138 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   scrollView: { flex: 1 },
   
-  // ✅ Added dashboard styles from your dashboard code
-  dashboardSection: { 
-    padding: 20, 
-    backgroundColor: 'white', 
-    margin: 20, 
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3
-  },
-  dashboardTitle: { 
-    fontSize: 22, 
-    fontWeight: "bold", 
-    marginBottom: 20,
-    textAlign: 'center'
-  },
-  moodText: { 
-    fontSize: 20, 
-    fontWeight: "600", 
-    marginBottom: 10,
-    textAlign: 'center'
-  },
-  detail: { 
-    fontSize: 16, 
-    color: '#555',
-    textAlign: 'center',
-    marginBottom: 5
-  },
-  noDataText: { 
-    fontSize: 16, 
-    color: '#999',
-    textAlign: 'center'
-  },
-  
-  // Existing styles remain unchanged
+  // Header styles
   header: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 32 },
   greeting: { fontSize: 28, fontWeight: '700', color: '#1F2937', marginBottom: 8 },
   subtitle: { fontSize: 16, color: '#6B7280' },
+  
+  // Mood Card styles - matching the image design
+  moodCard: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 20,
+    marginHorizontal: 24,
+    marginBottom: 24,
+    gap: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  moodCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  moodCardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  addButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moodDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  moodEmoji: {
+    fontSize: 48,
+  },
+  moodInfo: {
+    flex: 1,
+  },
+  moodLabel: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  moodDate: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  
+  // AI Analysis Section
+  aiAnalysisSection: {
+    gap: 8,
+  },
+  aiAnalysisTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  aiAnalysisPrimary: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6366F1',
+  },
+  aiAnalysisTag: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignSelf: 'flex-start',
+  },
+  aiAnalysisTagText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+  },
+  
+  // Mood Level Section
+  moodLevelSection: {
+    gap: 8,
+  },
+  moodLevelTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  moodLevelBar: {
+    height: 8,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  moodLevelFill: {
+    height: '100%',
+    backgroundColor: '#6366F1',
+    borderRadius: 4,
+  },
+  moodLevelIndicator: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  moodLevelText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  trendContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  trendText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#10B981',
+  },
+  
+  // Stats section styles
   statsContainer: { paddingHorizontal: 24, marginBottom: 32 },
   sectionTitle: { fontSize: 20, fontWeight: '600', color: '#1F2937', marginBottom: 16 },
-  statsScroll: { paddingLeft: 0 }
+  statsGrid: {
+    flexDirection: 'column',
+    gap: 16,
+  },
 });

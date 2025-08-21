@@ -84,7 +84,7 @@ export default function OnboardingScreen() {
         console.log('API result', result);
 
         router.push({
-          pathname: '/(tabs)/dashboard',
+          pathname: '/(tabs)/',
           params: { result: JSON.stringify(result) }
         });
 
