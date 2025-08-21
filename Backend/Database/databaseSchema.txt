@@ -1,0 +1,11 @@
+database name : Mood_Tracker
+
+collection : mood_score
+
+{
+    userId: <int>,
+    mood: <string>,
+    mood_level: <int>,
+    mood_emoji: <string>,
+    time_stamp: <datetime>
+}

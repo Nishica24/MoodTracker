@@ -1,0 +1,2 @@
+1) Connect Database
+2) phone logs - duration, time of call, Caller name

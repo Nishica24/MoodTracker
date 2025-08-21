@@ -7,6 +7,7 @@ export default function OnboardingScreen() {
   const [step, setStep] = useState(1);
 
   type FormData = {
+    user_id: number;
     name: string;
     age: string;
     goals: string[];
@@ -14,6 +15,7 @@ export default function OnboardingScreen() {
   };
 
   const [formData, setFormData] = useState<FormData>({
+    user_id: 123,
     name: '',
     age: '',
     goals: [],
@@ -84,7 +86,7 @@ export default function OnboardingScreen() {
         console.log('API result', result);
 
         router.push({
-          pathname: '/(tabs)/',
+          pathname: '/(tabs)',
           params: { result: JSON.stringify(result) }
         });
 

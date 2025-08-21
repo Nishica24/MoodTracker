@@ -27,7 +27,7 @@ export default function DashboardScreen() {
     }
     
     setIsLoading(false);
-  }, [data]);
+  }, []);
 
   
   // Generate dynamic stats based on mood scores

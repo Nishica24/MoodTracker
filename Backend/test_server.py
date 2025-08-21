@@ -1,7 +1,8 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
+from flask_pymongo import PyMongo
 
 # ---------------- App Setup ----------------
 app = Flask(__name__)
@@ -10,6 +11,15 @@ CORS(app)
 # Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# ---------------- MongoDB Connection ----------------
+
+# Configure MongoDB URI for flask_pymongo
+app.config["MONGO_URI"] = "mongodb+srv://nishica22210402:UW1Gy7gzbdwPR0WG@cluster0.0gblwuc.mongodb.net/Mood_Tracker?retryWrites=true&w=majority&appName=Cluster0"
+mongo = PyMongo(app)
+
+# Get database
+db = mongo.db
 
 # ---------------- Feature Space ----------------
 goals_list = [
@@ -54,6 +64,7 @@ def get_mood_from_score(score):
         return "Confused", 2, "😕"
 
 # ---------------- Prediction Function ----------------
+
 def predict_mood(goals_selected, concerns_selected):
     # normalize strings to lowercase for robust matching
     goals_norm = [g.lower() for g in goals_list]
@@ -71,12 +82,31 @@ def predict_mood(goals_selected, concerns_selected):
 # ---------------- API Routes ----------------
 @app.route("/")
 def home():
+
+    logger.info("Backend test complete. It is running successfully")
+
+    logger.info("testing mongoDB connection now : ")
+
+    db.Mood_Score.insert_one({
+        "user_id": 12345,
+        "mood": "test mood",
+        "mood_level": 7,
+        "mood_emoji": "🥲",
+        "created_at": datetime.now(timezone.utc)
+    })
+
+    for mood_doc in db.Mood_Score.find():
+        print(mood_doc)
+
+
     return jsonify({"message": "Mood Tracker API is running"})
+
 
 @app.route("/generate-mood-score", methods=["POST"])
 def generate_mood_score():
     try:
         data = request.json
+        user_id = data.get('user_id', 0)
         goals = data.get("goals", [])
         concerns = data.get("concerns", [])
 
@@ -84,11 +114,21 @@ def generate_mood_score():
 
         logger.info(f"✅ Mood predicted: {mood} ({mood_level} {mood_emoji})")
 
+        logger.info("Pushing data to database : ")
+
+        db.Mood_Score.insert_one({
+            "user_id:": user_id,
+            "mood": mood,
+            "mood_level": mood_level,
+            "mood_emoji": mood_emoji,
+            "created_at": datetime.now(timezone.utc)
+        })
+
         return jsonify({
             "mood": mood,
             "mood_level": mood_level,
             "emoji": mood_emoji,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
     except Exception as e:
         logger.error(f"❌ Error during prediction: {e}")
