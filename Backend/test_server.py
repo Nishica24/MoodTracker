@@ -12,6 +12,7 @@ CORS(app)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 # ---------------- MongoDB Connection ----------------
 
 # Configure MongoDB URI for flask_pymongo
@@ -44,6 +45,7 @@ concerns_list = [
 goal_weight = 2
 concern_weight = -2
 
+
 # ---------------- Mood Mapping ----------------
 def get_mood_from_score(score):
     if score >= 10:
@@ -62,6 +64,8 @@ def get_mood_from_score(score):
         return "Overwhelmed", 3, "😣"
     else:
         return "Confused", 2, "😕"
+
+
 
 # ---------------- Prediction Function ----------------
 
@@ -116,13 +120,14 @@ def generate_mood_score():
 
         logger.info("Pushing data to database : ")
 
-        db.Mood_Score.insert_one({
-            "user_id:": user_id,
-            "mood": mood,
-            "mood_level": mood_level,
-            "mood_emoji": mood_emoji,
-            "created_at": datetime.now(timezone.utc)
-        })
+# Commenting out the database connection right now for testing purposes. Bring it back when IP is whitelisted on the MongoDB Atlas
+#         db.Mood_Score.insert_one({
+#             "user_id:": user_id,
+#             "mood": mood,
+#             "mood_level": mood_level,
+#             "mood_emoji": mood_emoji,
+#             "created_at": datetime.now(timezone.utc)
+#         })
 
         return jsonify({
             "mood": mood,
