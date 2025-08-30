@@ -95,7 +95,11 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={true}
+        contentContainerStyle={styles.scrollContent}>
+
         <View style={styles.header}>
           <Text style={styles.greeting}>Good afternoon!</Text>
           <Text style={styles.subtitle}>How are you feeling today?</Text>
@@ -323,6 +327,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#10B981',
   },
+
+  scrollContent: {
+      paddingBottom: 150, // Adds 48 pixels of space after the last item
+    },
   
   // Stats section styles
   statsContainer: { paddingHorizontal: 24, marginBottom: 32 },
