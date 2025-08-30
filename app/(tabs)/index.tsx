@@ -3,7 +3,9 @@ import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity } fr
 import { StatsCard } from '@/components/StatsCard';
 import { QuickActions } from '@/components/QuickActions';
 import { Heart, Zap, Moon, Smartphone, DollarSign, LucideIcon, Plus, TrendingUp } from 'lucide-react-native';
-import { useLocalSearchParams, router } from 'expo-router'
+import { useLocalSearchParams, router } from 'expo-router';
+import { updateDailyHistory } from '@/services/callLogsServices';
+import { calculateSocialScore } from '@/scoreFunctions/socialScore';
 
 export default function DashboardScreen() {
 
@@ -11,22 +13,42 @@ export default function DashboardScreen() {
    const data = result ? JSON.parse(result as string) : null;  // ✅ Added this line
 
   const [moodScores, setMoodScores] = useState<any[]>([]);
+  const [socialScore, setSocialScore] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // ✅ Updated useEffect to work with your dashboard data
   useEffect(() => {
-    if (data) {
-      // Create mock mood_scores for compatibility with existing code
-      const mockMoodScores = [{
-        emotion: data.mood?.toLowerCase() || 'neutral',
-        confidence: data.mood_level ? data.mood_level / 10 : 0.5,
-        percentage: data.mood_level ? data.mood_level * 10 : 50
-      }];
-      
-      setMoodScores(mockMoodScores);
+
+    const initializeDashboard = async () => {
+        // --- This is your existing logic for mood data ---
+        if (data) {
+          // Create mock mood_scores for compatibility with existing code
+          const mockMoodScores = [{
+              emotion: data.mood?.toLowerCase() || 'neutral',
+              confidence: data.mood_level ? data.mood_level / 10 : 0.5,
+              percentage: data.mood_level ? data.mood_level * 10 : 50
+          }];
+          setMoodScores(mockMoodScores);
+        }
+
+      // try-catch block to update call logs, user baseline, and calculate and get social score
+      try {
+
+        // First, ensure the daily history is up-to-date.
+        await updateDailyHistory();
+
+        // Then, calculate the social score.
+        const score = await calculateSocialScore();
+        setSocialScore(score);
+
+      } catch (error) {
+        console.error("Failed to calculate social score:", error);
+        setSocialScore(5.0); // Set a neutral score on error
+      }
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
+
+    initializeDashboard();
   }, []);
 
   
@@ -46,7 +68,7 @@ export default function DashboardScreen() {
       {
         icon: Heart,
         title: 'Social Health',
-        value: '8.2',
+        value: socialScore !== null ? `${socialScore.toFixed(1)}` : '...', // Show score or loading dots
         subtitle: '+0.5 from last week',
         color: '#EF4444',
         trend: 'up',

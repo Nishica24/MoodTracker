@@ -4,7 +4,11 @@ import { PermissionsAndroid } from 'react-native';
 
 // --- Constants ---
 const HISTORY_KEY = 'call_log_history';
-const HISTORY_LENGTH = 30; // We will store the last 30 days of summaries
+const BASELINE_KEY = 'user_baseline'; // Key for storing the calculated baseline
+const LAST_UPDATE_KEY = 'call_log_last_update';
+const HISTORY_LENGTH = 365; // We will store the last 30 days of summaries
+const MINIMUM_DAYS_FOR_BASELINE = 7;
+
 
 // --- Type Definition ---
 // A blueprint for the daily summary object we will store.
@@ -16,6 +20,15 @@ type DailySummary = {
   rejectedCount: number;
   avgDuration: number; // Average duration in seconds
   uniqueContacts: number; // Count of unique numbers contacted
+};
+
+export type Baseline = {
+  avgOutgoing: number;
+  avgIncoming: number;
+  avgMissed: number;
+  avgRejected: number;
+  avgDuration: number;
+  avgUniqueContacts: number
 };
 
 /**
@@ -56,6 +69,8 @@ export const updateDailyHistory = async (): Promise<void> => {
     await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(history));
 
     console.log('Successfully updated call log history. Current history:', history);
+    console.log('Calling the updateUserBaseline function');
+    await updateUserBaseline();
 
   } catch (error) {
     console.error('An error occurred during updateDailyHistory:', error);
@@ -141,4 +156,54 @@ const getAndProcessTodaysData = async (): Promise<DailySummary | null> => {
     avgDuration: avgDuration,
     uniqueContacts: uniqueNumbers.size,
   };
+};
+
+
+/**
+ * ====================================================================
+ * Helper Function: updateUserBaseline
+ * ====================================================================
+ * This function is called from the updateDailyHistory,
+ * and updates & stores the user's baseline social activity.
+ */
+
+const updateUserBaseline = async (): Promise<void> => {
+    try {
+        const historyJson = await AsyncStorage.getItem(HISTORY_KEY);
+        const history: DailySummary[] = historyJson ? JSON.parse(historyJson) : [];
+
+        if (history.length < MINIMUM_DAYS_FOR_BASELINE) {
+            console.log('Not enough data to update baseline.');
+            return;
+        }
+
+         // The reduce function now sums up ALL parameters.
+            const totals = history.reduce((acc, day) => {
+                acc.outgoing += day.outgoingCount;
+                acc.incoming += day.incomingCount; // New
+                acc.missed += day.missedCount;
+                acc.rejected += day.rejectedCount; // New
+                acc.duration += day.avgDuration;
+                acc.uniqueContacts += day.uniqueContacts;
+                return acc;
+            }, { outgoing: 0, incoming: 0, missed: 0, rejected: 0, duration: 0, uniqueContacts: 0 });
+
+            const numDays = history.length;
+
+            // The final baseline object now includes averages for all fields.
+            const baseline: Baseline = {
+                avgOutgoing: totals.outgoing / numDays,
+                avgIncoming: totals.incoming / numDays, // New
+                avgMissed: totals.missed / numDays,
+                avgRejected: totals.rejected / numDays, // New
+                avgDuration: totals.duration / numDays,
+                avgUniqueContacts: totals.uniqueContacts / numDays,
+            };
+
+        await AsyncStorage.setItem(BASELINE_KEY, JSON.stringify(baseline));
+        console.log('User baseline has been automatically updated.');
+
+    } catch (error) {
+        console.error('Failed to auto-update user baseline:', error);
+    }
 };
