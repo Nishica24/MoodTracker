@@ -6,23 +6,26 @@ import { Heart, Zap, Moon, Smartphone, DollarSign, LucideIcon, Plus, TrendingUp 
 import { useLocalSearchParams, router } from 'expo-router';
 import { updateDailyHistory } from '@/services/callLogsServices';
 import { calculateSocialScore } from '@/scoreFunctions/socialScore';
+// --- NEW --- Import the permission handler
+import { handleCallLogPermission } from '@/services/permissions';
 
 export default function DashboardScreen() {
 
-   const { result } = useLocalSearchParams();  // ✅ Changed to match your dashboard
-   const data = result ? JSON.parse(result as string) : null;  // ✅ Added this line
+   const { result } = useLocalSearchParams();
+   const data = result ? JSON.parse(result as string) : null;
 
   const [moodScores, setMoodScores] = useState<any[]>([]);
   const [socialScore, setSocialScore] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // ✅ Updated useEffect to work with your dashboard data
+  // This useEffect hook is now updated to handle permissions first
   useEffect(() => {
 
     const initializeDashboard = async () => {
+        setIsLoading(true);
+
         // --- This is your existing logic for mood data ---
         if (data) {
-          // Create mock mood_scores for compatibility with existing code
           const mockMoodScores = [{
               emotion: data.mood?.toLowerCase() || 'neutral',
               confidence: data.mood_level ? data.mood_level / 10 : 0.5,
@@ -31,27 +34,38 @@ export default function DashboardScreen() {
           setMoodScores(mockMoodScores);
         }
 
-      // try-catch block to update call logs, user baseline, and calculate and get social score
-      try {
+      // --- NEW PERMISSION LOGIC ---
+      // Step 1: Request permission as soon as the screen loads.
+      const permissionGranted = await handleCallLogPermission();
 
-        // First, ensure the daily history is up-to-date.
-        await updateDailyHistory();
+      // Step 2: Only proceed if permission was granted.
+      if (permissionGranted) {
+          console.log("Call Log permission granted. Calculating social score...");
+          try {
+            // First, ensure the daily history is up-to-date.
+            await updateDailyHistory();
 
-        // Then, calculate the social score.
-        const score = await calculateSocialScore();
-        setSocialScore(score);
+            // Then, calculate the social score.
+            const score = await calculateSocialScore();
+            setSocialScore(score);
 
-      } catch (error) {
-        console.error("Failed to calculate social score:", error);
-        setSocialScore(5.0); // Set a neutral score on error
+          } catch (error) {
+            console.error("Failed to calculate social score:", error);
+            setSocialScore(5.0); // Set a neutral score on error
+          }
+      } else {
+        // If permission is denied, we can't calculate the score.
+        console.log("Call Log permission denied. Social score will not be shown.");
+        setSocialScore(null); // Set to null to show '...' or 'N/A' in the UI
       }
+
       setIsLoading(false);
     }
 
     initializeDashboard();
-  }, []);
+  }, []); // Empty dependency array ensures this runs only once when the component mounts
 
-  
+
   // Generate dynamic stats based on mood scores
   const getDynamicStats = (): Array<{
     icon: LucideIcon;
@@ -63,13 +77,14 @@ export default function DashboardScreen() {
     onPress?: () => void;
   }> => {
     if (moodScores.length === 0) return [];
-    
+
     return [
       {
         icon: Heart,
         title: 'Social Health',
-        value: socialScore !== null ? `${socialScore.toFixed(1)}` : '...', // Show score or loading dots
-        subtitle: '+0.5 from last week',
+        // --- UPDATED --- Handle the null case for socialScore
+        value: socialScore !== null ? `${socialScore.toFixed(1)}` : 'N/A',
+        subtitle: socialScore !== null ? '+0.5 from last week' : 'Permission needed',
         color: '#EF4444',
         trend: 'up',
         onPress: () => router.push('./social-health')
@@ -174,11 +189,11 @@ export default function DashboardScreen() {
           <View style={styles.moodLevelSection}>
             <Text style={styles.moodLevelTitle}>Mood Level</Text>
             <View style={styles.moodLevelBar}>
-              <View 
+              <View
                 style={[
-                  styles.moodLevelFill, 
+                  styles.moodLevelFill,
                   { width: `${((data?.mood_level || 5) / 10) * 100}%` }
-                ]} 
+                ]}
               />
             </View>
             <View style={styles.moodLevelIndicator}>
@@ -219,15 +234,16 @@ export default function DashboardScreen() {
   );
 }
 
+// Your existing styles remain unchanged
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   scrollView: { flex: 1 },
-  
+
   // Header styles
   header: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 32 },
   greeting: { fontSize: 28, fontWeight: '700', color: '#1F2937', marginBottom: 8 },
   subtitle: { fontSize: 16, color: '#6B7280' },
-  
+
   // Mood Card styles - matching the image design
   moodCard: {
     backgroundColor: 'white',
@@ -281,7 +297,7 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginTop: 2,
   },
-  
+
   // AI Analysis Section
   aiAnalysisSection: {
     gap: 8,
@@ -308,7 +324,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#374151',
   },
-  
+
   // Mood Level Section
   moodLevelSection: {
     gap: 8,
@@ -353,7 +369,7 @@ const styles = StyleSheet.create({
   scrollContent: {
       paddingBottom: 150, // Adds 48 pixels of space after the last item
     },
-  
+
   // Stats section styles
   statsContainer: { paddingHorizontal: 24, marginBottom: 32 },
   sectionTitle: { fontSize: 20, fontWeight: '600', color: '#1F2937', marginBottom: 16 },
