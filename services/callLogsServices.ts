@@ -4,205 +4,202 @@ import { PermissionsAndroid } from 'react-native';
 
 // --- Constants ---
 const HISTORY_KEY = 'call_log_history';
-const BASELINE_KEY = 'user_baseline'; // Key for storing the calculated baseline
+const BASELINE_KEY = 'user_baseline';
 const LAST_UPDATE_KEY = 'call_log_last_update';
-const HISTORY_LENGTH = 365; // We will store the last 30 days of summaries
+const HISTORY_LENGTH = 365;
 const MINIMUM_DAYS_FOR_BASELINE = 7;
 
-
-// --- Type Definition ---
-// A blueprint for the daily summary object we will store.
+// --- Type Definitions (unchanged) ---
 type DailySummary = {
-  date: string; // "YYYY-MM-DD"
+  date: string;
   outgoingCount: number;
   incomingCount: number;
   missedCount: number;
   rejectedCount: number;
-  avgDuration: number; // Average duration in seconds
-  uniqueContacts: number; // Count of unique numbers contacted
+  avgDuration: number;
+  uniqueContacts: number;
 };
-
 export type Baseline = {
   avgOutgoing: number;
   avgIncoming: number;
   avgMissed: number;
   avgRejected: number;
   avgDuration: number;
-  avgUniqueContacts: number
+  avgUniqueContacts: number;
 };
 
-/**
- * ====================================================================
- * Main Function: updateDailyHistory
- * ====================================================================
- * This is the primary function you'll call. It orchestrates the
- * fetching, processing, and storing of the daily call log summary.
- */
-export const updateDailyHistory = async (): Promise<void> => {
-  console.log('Starting daily history update...');
-  try {
-    // Step 1: Get today's processed summary data.
-    const newDailySummary = await getAndProcessTodaysData();
+// --- Helper Function (unchanged) ---
+const processLogsByDay = (logs: CallLog.CallLog[]): DailySummary[] => {
+  if (!logs || logs.length === 0) {
+    return [];
+  }
+  const dailyDataMap = new Map<string, {
+    totalDuration: number;
+    answeredCallCount: number;
+    uniqueNumbers: Set<string>;
+    summary: Omit<DailySummary, 'date' | 'avgDuration' | 'uniqueContacts'>;
+  }>();
 
-    if (!newDailySummary) {
-      console.log('Could not generate daily summary. Aborting update.');
-      return;
+  for (const log of logs) {
+    let numericTimestamp: number | undefined;
+    if (typeof log.timestamp === 'string') {
+      numericTimestamp = parseInt(log.timestamp, 10);
+    } else if (typeof log.timestamp === 'number') {
+      numericTimestamp = log.timestamp;
     }
 
-    // Step 2: Retrieve the existing history from storage.
+    if (numericTimestamp === undefined || !isFinite(numericTimestamp)) {
+      console.warn('Skipping a call log with an invalid or unparsable timestamp:', log);
+      continue;
+    }
+
+    const date = new Date(numericTimestamp).toISOString().split('T')[0];
+    if (!dailyDataMap.has(date)) {
+      dailyDataMap.set(date, {
+        totalDuration: 0,
+        answeredCallCount: 0,
+        uniqueNumbers: new Set<string>(),
+        summary: { outgoingCount: 0, incomingCount: 0, missedCount: 0, rejectedCount: 0 },
+      });
+    }
+    const dayData = dailyDataMap.get(date)!;
+    dayData.uniqueNumbers.add(log.phoneNumber);
+    switch (log.type) {
+      case 'OUTGOING':
+      case 'INCOMING':
+        dayData.summary[log.type === 'OUTGOING' ? 'outgoingCount' : 'incomingCount']++;
+        dayData.totalDuration += log.duration;
+        dayData.answeredCallCount++;
+        break;
+      case 'MISSED':
+        dayData.summary.missedCount++;
+        break;
+      case 'REJECTED':
+        dayData.summary.rejectedCount++;
+        break;
+    }
+  }
+  const processedSummaries: DailySummary[] = [];
+  for (const [date, data] of dailyDataMap.entries()) {
+    const avgDuration = data.answeredCallCount > 0 ? Math.round(data.totalDuration / data.answeredCallCount) : 0;
+    processedSummaries.push({
+      ...data.summary,
+      date: date,
+      avgDuration: avgDuration,
+      uniqueContacts: data.uniqueNumbers.size,
+    });
+  }
+  return processedSummaries.sort((a, b) => b.date.localeCompare(a.date));
+};
+
+// --- CORRECTED "SMART CONTROLLER" MAIN FUNCTION ---
+export const updateDailyHistory = async (): Promise<void> => {
+  console.log('Starting smart history update...');
+  try {
     const historyJson = await AsyncStorage.getItem(HISTORY_KEY);
     let history: DailySummary[] = historyJson ? JSON.parse(historyJson) : [];
 
-    // Step 3: Add the new summary and manage the history list.
-    // Remove any existing entry for today to prevent duplicates.
-    history = history.filter(day => day.date !== newDailySummary.date);
+    const lastUpdateDateString = await AsyncStorage.getItem(LAST_UPDATE_KEY);
+    const todayDateString = new Date().toISOString().split('T')[0];
 
-    // Add the new summary to the beginning of the array.
-    history.unshift(newDailySummary);
+    // CASE 1: New User OR Inconsistent State
+    if (history.length === 0 || !lastUpdateDateString) {
+      console.log('CASE 1: No/incomplete history found. Performing initial 7-day back-fill.');
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - MINIMUM_DAYS_FOR_BASELINE);
+      sevenDaysAgo.setHours(0, 0, 0, 0);
+      const logsToProcess = await CallLog.load(-1, { minTimestamp: sevenDaysAgo.getTime() });
+      history = processLogsByDay(logsToProcess);
 
-    // Ensure the history does not exceed the desired length.
+    // CASE 2: Regular User (already updated today)
+    } else if (lastUpdateDateString === todayDateString) {
+      console.log('CASE 2: Already updated today. Refreshing today\'s data only.');
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      const logsToProcess = await CallLog.load(-1, { minTimestamp: startOfDay.getTime() });
+      const todaySummaryArray = processLogsByDay(logsToProcess);
+
+      // Always remove the old entry for today to avoid duplicates
+      history = history.filter(day => day.date !== todayDateString);
+
+      // --- CORRECTED LOGIC IS HERE ---
+      if (todaySummaryArray.length > 0) {
+        // If there were calls today, add the new summary
+        history.unshift(todaySummaryArray[0]);
+      } else {
+        // If NO calls today, add a new zeroed-out entry to maintain history length
+        console.log('No calls found for today, adding a zeroed-out record.');
+        history.unshift({
+            date: todayDateString,
+            outgoingCount: 0,
+            incomingCount: 0,
+            missedCount: 0,
+            rejectedCount: 0,
+            avgDuration: 0,
+            uniqueContacts: 0,
+        });
+      }
+      // --- END OF CORRECTION ---
+
+    // CASE 3: Returning User (missed one or more days)
+    } else {
+      console.log(`CASE 3: Missed day(s). Fetching logs since last update on ${lastUpdateDateString}.`);
+      const startDate = new Date(lastUpdateDateString);
+      startDate.setDate(startDate.getDate() + 1);
+      startDate.setHours(0, 0, 0, 0);
+      const logsToProcess = await CallLog.load(-1, { minTimestamp: startDate.getTime() });
+      const newSummaries = processLogsByDay(logsToProcess);
+
+      if (newSummaries.length > 0) {
+        const newDates = new Set(newSummaries.map(s => s.date));
+        const oldHistoryToKeep = history.filter(day => !newDates.has(day.date));
+        history = [...newSummaries, ...oldHistoryToKeep].sort((a, b) => b.date.localeCompare(a.date));
+      }
+    }
+
+    // --- Finalize and save ---
     if (history.length > HISTORY_LENGTH) {
       history = history.slice(0, HISTORY_LENGTH);
     }
-
-    // Step 4: Save the updated history back to storage.
     await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-
-    console.log('Successfully updated call log history. Current history:', history);
-    console.log('Calling the updateUserBaseline function');
+    await AsyncStorage.setItem(LAST_UPDATE_KEY, todayDateString);
+    console.log(`History update complete. Total entries: ${history.length}.`);
     await updateUserBaseline();
-
   } catch (error) {
-    console.error('An error occurred during updateDailyHistory:', error);
+    console.error('An error occurred during smart history update:', error);
   }
 };
 
-
-/**
- * ====================================================================
- * Helper Function: getAndProcessTodaysData
- * ====================================================================
- * This function handles the "dirty work": fetching raw logs and
- * transforming them into a clean DailySummary object.
- */
-const getAndProcessTodaysData = async (): Promise<DailySummary | null> => {
-  const hasPermission = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
-  if (!hasPermission) {
-    console.warn('Permission denied. Cannot fetch call logs.');
-    return null;
-  }
-
-  // --- Fetching ---
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-
-  const rawLogs = await CallLog.load(-1, { minTimestamp: startOfDay.getTime() });
-
-  if (!rawLogs || rawLogs.length === 0) {
-    console.log('No call logs found for today.');
-    // Return a zeroed-out summary for days with no activity
-    return {
-      date: new Date().toISOString().split('T')[0],
-      outgoingCount: 0,
-      incomingCount: 0,
-      missedCount: 0,
-      rejectedCount: 0,
-      avgDuration: 0,
-      uniqueContacts: 0,
-    };
-  }
-
-  // --- Processing ---
-  let totalDuration = 0;
-  let answeredCallCount = 0;
-  const uniqueNumbers = new Set<string>();
-
-  const summary: Omit<DailySummary, 'date' | 'avgDuration' | 'uniqueContacts'> = {
-    outgoingCount: 0,
-    incomingCount: 0,
-    missedCount: 0,
-    rejectedCount: 0,
-  };
-
-  for (const log of rawLogs) {
-    uniqueNumbers.add(log.phoneNumber);
-
-    switch (log.type) {
-      case 'OUTGOING':
-        summary.outgoingCount++;
-        totalDuration += log.duration;
-        answeredCallCount++;
-        break;
-      case 'INCOMING':
-        summary.incomingCount++;
-        totalDuration += log.duration;
-        answeredCallCount++;
-        break;
-      case 'MISSED':
-        summary.missedCount++;
-        break;
-      case 'REJECTED': // Assuming the library supports this, otherwise it falls under MISSED
-        summary.rejectedCount++;
-        break;
-    }
-  }
-
-  // --- Final Calculation ---
-  const avgDuration = answeredCallCount > 0 ? Math.round(totalDuration / answeredCallCount) : 0;
-
-  return {
-    ...summary,
-    date: new Date().toISOString().split('T')[0],
-    avgDuration: avgDuration,
-    uniqueContacts: uniqueNumbers.size,
-  };
-};
-
-
-/**
- * ====================================================================
- * Helper Function: updateUserBaseline
- * ====================================================================
- * This function is called from the updateDailyHistory,
- * and updates & stores the user's baseline social activity.
- */
-
+// --- Unchanged updateUserBaseline function ---
 const updateUserBaseline = async (): Promise<void> => {
     try {
         const historyJson = await AsyncStorage.getItem(HISTORY_KEY);
         const history: DailySummary[] = historyJson ? JSON.parse(historyJson) : [];
-
         if (history.length < MINIMUM_DAYS_FOR_BASELINE) {
-            console.log('Not enough data to update baseline.');
+            console.log(`Not enough data to update baseline. Need ${MINIMUM_DAYS_FOR_BASELINE}, have ${history.length}.`);
             return;
         }
-
-         // The reduce function now sums up ALL parameters.
-            const totals = history.reduce((acc, day) => {
-                acc.outgoing += day.outgoingCount;
-                acc.incoming += day.incomingCount; // New
-                acc.missed += day.missedCount;
-                acc.rejected += day.rejectedCount; // New
-                acc.duration += day.avgDuration;
-                acc.uniqueContacts += day.uniqueContacts;
-                return acc;
-            }, { outgoing: 0, incoming: 0, missed: 0, rejected: 0, duration: 0, uniqueContacts: 0 });
-
-            const numDays = history.length;
-
-            // The final baseline object now includes averages for all fields.
-            const baseline: Baseline = {
-                avgOutgoing: totals.outgoing / numDays,
-                avgIncoming: totals.incoming / numDays, // New
-                avgMissed: totals.missed / numDays,
-                avgRejected: totals.rejected / numDays, // New
-                avgDuration: totals.duration / numDays,
-                avgUniqueContacts: totals.uniqueContacts / numDays,
-            };
-
+        const totals = history.reduce((acc, day) => {
+            acc.outgoing += day.outgoingCount;
+            acc.incoming += day.incomingCount;
+            acc.missed += day.missedCount;
+            acc.rejected += day.rejectedCount;
+            acc.duration += day.avgDuration * (day.incomingCount + day.outgoingCount);
+            acc.totalCalls += day.incomingCount + day.outgoingCount;
+            acc.uniqueContacts += day.uniqueContacts;
+            return acc;
+        }, { outgoing: 0, incoming: 0, missed: 0, rejected: 0, duration: 0, uniqueContacts: 0, totalCalls: 0 });
+        const numDays = history.length;
+        const baseline: Baseline = {
+            avgOutgoing: totals.outgoing / numDays,
+            avgIncoming: totals.incoming / numDays,
+            avgMissed: totals.missed / numDays,
+            avgRejected: totals.rejected / numDays,
+            avgDuration: totals.totalCalls > 0 ? totals.duration / totals.totalCalls : 0,
+            avgUniqueContacts: totals.uniqueContacts / numDays,
+        };
         await AsyncStorage.setItem(BASELINE_KEY, JSON.stringify(baseline));
-        console.log('User baseline has been automatically updated.');
-
+        console.log('User baseline has been successfully updated.', baseline);
     } catch (error) {
         console.error('Failed to auto-update user baseline:', error);
     }
