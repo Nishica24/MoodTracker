@@ -4,10 +4,26 @@ import { StatsCard } from '@/components/StatsCard';
 import { QuickActions } from '@/components/QuickActions';
 import { Heart, Zap, Moon, Smartphone, DollarSign, LucideIcon, Plus, TrendingUp } from 'lucide-react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { updateDailyHistory } from '@/services/callLogsServices';
-import { calculateSocialScore } from '@/scoreFunctions/socialScore';
-// --- NEW --- Import the permission handler
+// --- CORRECTED --- Use relative paths for stability
+import { updateDailyHistory } from '../../services/callLogsServices';
+import { calculateSocialScore } from '../../scoreFunctions/socialScore';
 import { handleCallLogPermission } from '@/services/permissions';
+
+// --- NEW FUNCTION ---
+/**
+ * Returns a greeting based on the current hour of the day.
+ */
+const getGreeting = (): string => {
+  const currentHour = new Date().getHours();
+
+  if (currentHour < 12) {
+    return 'Good morning!';
+  } else if (currentHour < 18) {
+    return 'Good afternoon!';
+  } else {
+    return 'Good evening!';
+  }
+};
 
 export default function DashboardScreen() {
 
@@ -16,15 +32,16 @@ export default function DashboardScreen() {
 
   const [moodScores, setMoodScores] = useState<any[]>([]);
   const [socialScore, setSocialScore] = useState<number | null>(null);
+  // --- NEW --- State for the combined overall score
+  const [overallScore, setOverallScore] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // This useEffect hook is now updated to handle permissions first
+  // This useEffect handles the initial data loading and call log processing
   useEffect(() => {
-
     const initializeDashboard = async () => {
         setIsLoading(true);
 
-        // --- This is your existing logic for mood data ---
+        // --- Initial logic for mood data ---
         if (data) {
           const mockMoodScores = [{
               emotion: data.mood?.toLowerCase() || 'neutral',
@@ -32,38 +49,50 @@ export default function DashboardScreen() {
               percentage: data.mood_level ? data.mood_level * 10 : 50
           }];
           setMoodScores(mockMoodScores);
+          // --- NEW --- Set the initial overall score based on mood level alone
+          setOverallScore(data.mood_level || 5);
         }
 
-      // --- NEW PERMISSION LOGIC ---
-      // Step 1: Request permission as soon as the screen loads.
       const permissionGranted = await handleCallLogPermission();
 
-      // Step 2: Only proceed if permission was granted.
       if (permissionGranted) {
           console.log("Call Log permission granted. Calculating social score...");
           try {
-            // First, ensure the daily history is up-to-date.
             await updateDailyHistory();
-
-            // Then, calculate the social score.
             const score = await calculateSocialScore();
-            setSocialScore(score);
-
+            setSocialScore(score); // This will trigger the other useEffect
           } catch (error) {
             console.error("Failed to calculate social score:", error);
             setSocialScore(5.0); // Set a neutral score on error
           }
       } else {
-        // If permission is denied, we can't calculate the score.
         console.log("Call Log permission denied. Social score will not be shown.");
         setSocialScore(null); // Set to null to show '...' or 'N/A' in the UI
       }
-
       setIsLoading(false);
     }
-
     initializeDashboard();
-  }, []); // Empty dependency array ensures this runs only once when the component mounts
+  }, []);
+
+
+  // --- NEW --- This useEffect reacts to changes in the social score and updates the overall score
+  useEffect(() => {
+    console.log("Detected a change in social score, recalculating overall score...");
+    if (data?.mood_level) {
+        if (socialScore !== null) {
+            // --- Weighted Average Calculation ---
+            // You can adjust these weights as you see fit.
+            const moodWeight = 0.6; // 60%
+            const socialWeight = 0.4; // 40%
+            const newOverallScore = (data.mood_level * moodWeight) + (socialScore * socialWeight);
+            setOverallScore(newOverallScore);
+            console.log(`New Overall Score: ${newOverallScore.toFixed(1)} (Mood: ${data.mood_level}, Social: ${socialScore})`);
+        } else {
+            // If social score isn't available, the overall score is just the mood level
+            setOverallScore(data.mood_level);
+        }
+    }
+  }, [socialScore, data]);
 
 
   // Generate dynamic stats based on mood scores
@@ -82,9 +111,8 @@ export default function DashboardScreen() {
       {
         icon: Heart,
         title: 'Social Health',
-        // --- UPDATED --- Handle the null case for socialScore
         value: socialScore !== null ? `${socialScore.toFixed(1)}` : 'N/A',
-        subtitle: socialScore !== null ? '+0.5 from last week' : 'Permission needed',
+        subtitle: socialScore !== null ? 'vs. your average' : 'Permission needed',
         color: '#EF4444',
         trend: 'up',
         onPress: () => router.push('./social-health')
@@ -138,7 +166,7 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.scrollContent}>
 
         <View style={styles.header}>
-          <Text style={styles.greeting}>Good afternoon!</Text>
+          <Text style={styles.greeting}>{getGreeting()}</Text>
           <Text style={styles.subtitle}>How are you feeling today?</Text>
         </View>
 
@@ -185,20 +213,20 @@ export default function DashboardScreen() {
             </View>
           </View>
 
-          {/* Mood Level Section */}
+          {/* --- MODIFIED Mood Level Section --- */}
           <View style={styles.moodLevelSection}>
-            <Text style={styles.moodLevelTitle}>Mood Level</Text>
+            <Text style={styles.moodLevelTitle}>Overall Mood Level</Text>
             <View style={styles.moodLevelBar}>
               <View
                 style={[
                   styles.moodLevelFill,
-                  { width: `${((data?.mood_level || 5) / 10) * 100}%` }
+                  { width: `${((overallScore || 5) / 10) * 100}%` }
                 ]}
               />
             </View>
             <View style={styles.moodLevelIndicator}>
               <Text style={styles.moodLevelText}>
-                {data?.mood_level || 5}/10
+                {overallScore ? overallScore.toFixed(1) : '5.0'}/10
               </Text>
               <View style={styles.trendContainer}>
                 <TrendingUp size={16} color="#10B981" />
@@ -234,7 +262,6 @@ export default function DashboardScreen() {
   );
 }
 
-// Your existing styles remain unchanged
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   scrollView: { flex: 1 },
@@ -328,11 +355,6 @@ const styles = StyleSheet.create({
   // Mood Level Section
   moodLevelSection: {
     gap: 8,
-  },
-  moodLevelTitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6B7280',
   },
   moodLevelBar: {
     height: 8,
