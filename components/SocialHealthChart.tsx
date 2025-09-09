@@ -20,6 +20,8 @@ export function SocialHealthChart({ period }: SocialHealthChartProps) {
         const historicalScores = await getHistoricalSocialScores(period);
         
         if (historicalScores.length === 0) {
+
+          console.log('historical Score is 0, so using default')
           // Fallback to static data if no historical data
           const fallbackData = [7.2, 8.1, 6.8, 9.2, 8.5, 7.9, 8.8];
           const fallbackDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];

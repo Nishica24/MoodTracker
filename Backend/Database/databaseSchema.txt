@@ -7,5 +7,5 @@ collection : mood_score
     mood: <string>,
     mood_level: <int>,
     mood_emoji: <string>,
-    time_stamp: <datetime>
+    create_at: <datetime>
 }

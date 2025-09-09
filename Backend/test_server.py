@@ -1,8 +1,9 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta, time
 from flask_pymongo import PyMongo
+from collections import defaultdict
 
 # ---------------- App Setup ----------------
 app = Flask(__name__)
@@ -118,16 +119,24 @@ def generate_mood_score():
 
         logger.info(f"✅ Mood predicted: {mood} ({mood_level} {mood_emoji})")
 
-        logger.info("Pushing data to database : ")
 
 # Commenting out the database connection right now for testing purposes. Bring it back when IP is whitelisted on the MongoDB Atlas
-#         db.Mood_Score.insert_one({
-#             "user_id:": user_id,
-#             "mood": mood,
-#             "mood_level": mood_level,
-#             "mood_emoji": mood_emoji,
-#             "created_at": datetime.now(timezone.utc)
-#         })
+        try:
+            logger.info('user ID - ', user_id)
+            logger.info('time stamp - ', datetime.now(timezone.utc))
+            logger.info("Pushing data to database : ")
+            db.Mood_Score.insert_one({
+                "user_id:": user_id,
+                "mood": mood,
+                "mood_level": mood_level,
+                "mood_emoji": mood_emoji,
+                "created_at": datetime.now(timezone.utc)
+            })
+
+            logger.info("Data pushed to database successfully")
+
+        except Exception as e:
+            logger.error(f"❌ Error pushing data to database: {e}")
 
         return jsonify({
             "mood": mood,
@@ -138,6 +147,101 @@ def generate_mood_score():
     except Exception as e:
         logger.error(f"❌ Error during prediction: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+
+# -----------------  Helper function for calculating the daily averages -------------------
+
+# def calculate_daily_averages(mood_entries):
+#     """
+#     Aggregates mood entries to get a single average score per day.
+#     """
+#     daily_scores = defaultdict(lambda: {'total': 0, 'count': 0})
+#
+#     for entry in mood_entries:
+#         # Get the date part of the timestamp
+#         day = entry['time_stamp'].strftime('%Y-%m-%d')
+#         daily_scores[day]['total'] += entry['mood_level']
+#         daily_scores[day]['count'] += 1
+#
+#     # Calculate the average for each day
+#     daily_averages = {
+#         day: data['total'] / data['count'] for day, data in daily_scores.items()
+#     }
+#     return daily_averages
+
+
+# -------- API route to fetch the database mood scores for the analytics chart ------------
+
+@app.route('/api/mood-analytics/<int:user_id>', methods=['GET'])
+def get_mood_analytics(user_id):
+    """
+    Provides mood analytics data for a specific user.
+    Currently supports a 'weekly' period.
+    """
+    period = request.args.get('period', 'week') # Default to 'weekly'
+
+    if period != 'week':
+        return jsonify({"error": "Only 'weekly' period is currently supported"}), 400
+
+    try:
+        # 1. Calculate the date range for the last 7 days
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=7)
+
+        print('end_date - ', end_date)
+        print('start_date - ', start_date)
+        print('user_id - ', user_id)
+
+        # 2. Query MongoDB for mood scores within the date range for the user
+#         query = {
+#             "userId": user_id,
+#             "created_at": {"$gte": start_date, "$lt": end_date}
+#         }
+        # The 'collection' variable is now managed by Flask-PyMongo
+        mood_entries = list(db.Mood_Score.find())
+        app.logger.info(f"Found {len(mood_entries)} entries.")
+
+        if not mood_entries:
+            return jsonify({"labels": [], "data": [], "average": 0})
+
+        # --- FIX: Use defaultdict for cleaner aggregation ---
+        daily_scores = defaultdict(list)
+        for entry in mood_entries:
+            day_str = entry['created_at'].strftime('%a') # e.g., 'Mon'
+            daily_scores[day_str].append(entry['mood_level'])
+
+        labels = []
+        data = []
+        total_mood_sum = 0
+        total_mood_count = 0
+
+        for i in range(7):
+            day = start_date + timedelta(days=i)
+            day_str = day.strftime('%a')
+            labels.append(day_str)
+
+            if day_str in daily_scores:
+                day_avg = sum(daily_scores[day_str]) / len(daily_scores[day_str])
+                data.append(day_avg)
+                total_mood_sum += sum(daily_scores[day_str])
+                total_mood_count += len(daily_scores[day_str])
+            else:
+                data.append(0)
+
+        average = (total_mood_sum / total_mood_count) if total_mood_count > 0 else 0
+
+        return jsonify({
+            "labels": labels,
+            "data": data,
+            "average": round(average, 2)
+        })
+
+    except Exception as e:
+        app.logger.error(f"An error occurred: {e}")
+        return jsonify({"error": "An internal server error occurred."}), 500
+
+
 
 @app.route("/test-mood", methods=["GET"])
 def test_mood():

@@ -1,18 +1,69 @@
-import React from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import { ChartBar as BarChart3 } from 'lucide-react-native';
+import React, { useState, useEffect } from 'react';
+// Corrected imports to use React Native packages as intended
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { BarChart3 } from 'lucide-react-native';
 
 interface AnalyticsChartProps {
   period: string;
+  userId: number;
 }
 
-export function AnalyticsChart({ period }: AnalyticsChartProps) {
-  // Simulated data points for mood tracking
-  const moodData = [6.5, 7.2, 6.8, 8.1, 7.5, 6.9, 8.3];
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  
-  const maxValue = Math.max(...moodData);
+interface ChartData {
+  labels: string[];
+  data: number[];
+  average: number;
+}
+
+// --- IMPORTANT ---
+// If running on an Android emulator with a local server, use 'http://10.0.2.2:5000'.
+// If on a physical device, use your computer's network IP.
+const API_BASE_URL = 'http://192.168.0.106:5000';
+
+export function AnalyticsChart({ period, userId }: AnalyticsChartProps) {
+  const [chartData, setChartData] = useState<ChartData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchAnalyticsData = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/mood-analytics/${userId}?period=${period}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch data from the server.');
+        }
+        const data: ChartData = await response.json();
+        setChartData(data);
+      } catch (err: any) {
+        setError(err.message || 'An unexpected error occurred.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAnalyticsData();
+  }, [period, userId]);
+
+  const maxValue = chartData && chartData.data.length > 0 ? Math.max(...chartData.data) : 10;
   const chartHeight = 120;
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color="#6366F1" />
+        <Text style={styles.loadingText}>Loading Mood Patterns...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <Text style={styles.errorText}>Error: {error}</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -21,26 +72,32 @@ export function AnalyticsChart({ period }: AnalyticsChartProps) {
           <BarChart3 size={20} color="#6366F1" />
           <Text style={styles.title}>Mood Patterns</Text>
         </View>
-        <Text style={styles.average}>Avg: 7.3</Text>
+        <Text style={styles.average}>Avg: {chartData?.average?.toFixed(1) ?? 'N/A'}</Text>
       </View>
 
       <View style={styles.chartContainer}>
-        <View style={styles.chart}>
-          {moodData.map((value, index) => (
-            <View key={index} style={styles.barContainer}>
-              <View
-                style={[
-                  styles.bar,
-                  {
-                    height: (value / maxValue) * chartHeight,
-                    backgroundColor: value > 7 ? '#10B981' : value > 5 ? '#F59E0B' : '#EF4444'
-                  }
-                ]}
-              />
-              <Text style={styles.dayLabel}>{days[index]}</Text>
-            </View>
-          ))}
-        </View>
+        {chartData && chartData.data.length > 0 ? (
+          <View style={styles.chart}>
+            {chartData.data.map((value, index) => (
+              <View key={index} style={styles.barContainer}>
+                <View
+                  style={[
+                    styles.bar,
+                    {
+                      height: value > 0 ? (value / maxValue) * chartHeight : 2,
+                      backgroundColor: value > 7 ? '#10B981' : value > 5 ? '#F59E0B' : '#EF4444'
+                    }
+                  ]}
+                />
+                <Text style={styles.dayLabel}>{chartData.labels[index]}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={[styles.chart, styles.centerContent]}>
+            <Text style={styles.dayLabel}>No mood data available for this period.</Text>
+          </View>
+        )}
 
         <View style={styles.legend}>
           <View style={styles.legendItem}>
@@ -61,27 +118,42 @@ export function AnalyticsChart({ period }: AnalyticsChartProps) {
   );
 }
 
+// Using StyleSheet.create as is standard for React Native
 const styles = StyleSheet.create({
   container: {
     backgroundColor: 'white',
     borderRadius: 20,
     padding: 20,
-    gap: 16,
+    minHeight: 250,
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    flex: 1,
+  },
+  loadingText: {
+    marginTop: 10,
+    color: '#6B7280',
+  },
+  errorText: {
+    color: '#EF4444',
+    fontWeight: '500',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 16,
   },
   titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   title: {
     fontSize: 18,
     fontWeight: '600',
     color: '#1F2937',
+    marginLeft: 8,
   },
   average: {
     fontSize: 14,
@@ -89,7 +161,7 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   chartContainer: {
-    gap: 16,
+    flex: 1,
   },
   chart: {
     flexDirection: 'row',
@@ -97,16 +169,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     height: 140,
     paddingHorizontal: 8,
+    marginBottom: 16,
   },
   barContainer: {
     flex: 1,
     alignItems: 'center',
-    gap: 8,
   },
   bar: {
     width: 16,
     borderRadius: 8,
-    minHeight: 20,
+    minHeight: 2,
+    marginBottom: 8,
   },
   dayLabel: {
     fontSize: 12,
@@ -116,20 +189,21 @@ const styles = StyleSheet.create({
   legend: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 20,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    marginHorizontal: 10,
   },
   legendDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
+    marginRight: 6,
   },
   legendText: {
     fontSize: 12,
     color: '#6B7280',
   },
 });
+

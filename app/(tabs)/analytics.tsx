@@ -74,7 +74,7 @@ export default function AnalyticsScreen() {
             ))}
           </View>
 
-          <AnalyticsChart period={selectedPeriod} />
+          <AnalyticsChart userId={123} period={selectedPeriod} />
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Key Trends</Text>
