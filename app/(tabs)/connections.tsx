@@ -4,10 +4,11 @@ import {
   TouchableOpacity, Platform, PermissionsAndroid, AppState
 } from 'react-native';
 import { ConnectionCard } from '@/components/ConnectionCard';
-import { Plus, Smartphone, Watch, Calendar, Activity, Headphones, Phone, LucideProps } from 'lucide-react-native';
+import { Plus, Smartphone, Watch, Calendar, Activity, Headphones, Phone, Moon, LucideProps } from 'lucide-react-native';
 
 // STEP 3: Import the function from its new location
 import { handleCallLogPermission, openAppSettings } from '@/services/permissions'; // Use your correct path alias or relative path
+import { SleepService } from '@/services/SleepService';
 
 // --- Type Definitions ---
 type Connection = {
@@ -73,6 +74,15 @@ if (Platform.OS === 'android') {
     description: 'Social activity patterns and engagement',
     color: '#FF9500'
   });
+  
+  initialConnections.push({
+    id: '7',
+    name: 'Sleep Tracking',
+    icon: Moon,
+    connected: false,
+    description: 'Sleep quality and duration analysis',
+    color: '#8B5CF6'
+  });
 }
 
 // --- The Main Component ---
@@ -87,12 +97,21 @@ export default function ConnectionsScreen() {
     // Function to check which permission have been granted
     const syncPermissions = async () => {
       if (Platform.OS === 'android') {
-        // We can even use our modular function here for checking!
-        const hasPermission = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
+        // Check call log permission
+        const hasCallLogPermission = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
+        
+        // Check sleep permission (activity recognition)
+        const hasSleepPermission = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACTIVITY_RECOGNITION);
+        
         setConnections(prev =>
-          prev.map(conn =>
-            conn.id === '6' ? { ...conn, connected: hasPermission } : conn
-          )
+          prev.map(conn => {
+            if (conn.id === '6') {
+              return { ...conn, connected: hasCallLogPermission };
+            } else if (conn.id === '7') {
+              return { ...conn, connected: hasSleepPermission };
+            }
+            return conn;
+          })
         );
       }
     };
@@ -121,9 +140,8 @@ export default function ConnectionsScreen() {
 
   const toggleConnection = async (id: string) => {
 
-    // if construct to call permissions function for call logs. Similarly add for other permissions
+    // Handle call log permission
     if (id === '6') {
-
       // Check if permission is already granted to understand if the user is trying revoke the permission
       const hasPermission = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
 
@@ -131,7 +149,6 @@ export default function ConnectionsScreen() {
         openAppSettings();
       }
       else {
-
           // Call the function to request permission
           const isGranted = await handleCallLogPermission();
 
@@ -145,6 +162,29 @@ export default function ConnectionsScreen() {
       return;
     }
 
+    // Handle sleep permission
+    if (id === '7') {
+      // Check if permission is already granted
+      const hasPermission = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACTIVITY_RECOGNITION);
+
+      if(hasPermission) {
+        openAppSettings();
+      }
+      else {
+          // Call the function to request permission
+          const isGranted = await SleepService.requestPermission();
+
+          // Update the state based on permission request
+          setConnections(prev =>
+              prev.map(conn =>
+                conn.id === id ? { ...conn, connected: isGranted } : conn
+              )
+            );
+      }
+      return;
+    }
+
+    // Handle other connections (non-permission based)
     setConnections(prev =>
       prev.map(conn =>
         conn.id === id ? { ...conn, connected: !conn.connected } : conn

@@ -10,9 +10,10 @@ interface StatsCardProps {
   color: string;
   trend: 'up' | 'down' | 'stable';
   onPress?: () => void;
+  showViewDetails?: boolean;
 }
 
-export function StatsCard({ icon: Icon, title, value, subtitle, color, trend, onPress }: StatsCardProps) {
+export function StatsCard({ icon: Icon, title, value, subtitle, color, trend, onPress, showViewDetails = false }: StatsCardProps) {
   const getTrendIcon = () => {
     switch (trend) {
       case 'up':
@@ -36,7 +37,7 @@ export function StatsCard({ icon: Icon, title, value, subtitle, color, trend, on
   };
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress}>
+    <View style={styles.card}>
       <View style={styles.header}>
         <View style={[styles.iconContainer, { backgroundColor: color + '20' }]}>
           <Icon size={20} color={color} />
@@ -47,7 +48,13 @@ export function StatsCard({ icon: Icon, title, value, subtitle, color, trend, on
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.value}>{value}</Text>
       <Text style={[styles.subtitle, { color: getTrendColor() }]}>{subtitle}</Text>
-    </TouchableOpacity>
+      
+      {showViewDetails && onPress && (
+        <TouchableOpacity style={styles.viewDetailsButton} onPress={onPress}>
+          <Text style={styles.viewDetailsText}>View Details</Text>
+        </TouchableOpacity>
+      )}
+    </View>
   );
 }
 
@@ -88,5 +95,18 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 12,
     fontWeight: '500',
+  },
+  viewDetailsButton: {
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignSelf: 'center',
+    backgroundColor: '#F3F4F6',
+  },
+  viewDetailsText: {
+    color: '#6B7280',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

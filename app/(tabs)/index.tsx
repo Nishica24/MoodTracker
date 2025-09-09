@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, Alert } from 'react-native';
 import { StatsCard } from '@/components/StatsCard';
 import { QuickActions } from '@/components/QuickActions';
 import { Heart, Zap, Moon, Smartphone, DollarSign, LucideIcon, Plus, TrendingUp } from 'lucide-react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 // --- CORRECTED --- Use relative paths for stability
 import { updateDailyHistory } from '../../services/callLogsServices';
-import { calculateSocialScore } from '../../scoreFunctions/socialScore';
+import { calculateSocialScore, getHistoricalSocialScores } from '../../scoreFunctions/socialScore';
 import { handleCallLogPermission } from '@/services/permissions';
-import { SleepPermissionTester } from '@/components/SleepPermissionTester';
 import { SleepService, SleepSegment } from '@/services/SleepService';
 
 // --- NEW FUNCTION ---
@@ -27,12 +26,51 @@ const getGreeting = (): string => {
   }
 };
 
+/**
+ * Calculates the social health trend based on recent scores
+ */
+const calculateSocialTrend = async (): Promise<'up' | 'down' | 'stable'> => {
+  try {
+    const historicalScores = await getHistoricalSocialScores('week');
+    
+    if (historicalScores.length < 2) {
+      return 'stable'; // Not enough data to determine trend
+    }
+
+    // Get the most recent scores (last 3-4 days if available)
+    const recentScores = historicalScores.slice(-Math.min(4, historicalScores.length));
+    const olderScores = historicalScores.slice(0, -Math.min(4, historicalScores.length));
+
+    if (olderScores.length === 0) {
+      return 'stable'; // Not enough historical data
+    }
+
+    const recentAverage = recentScores.reduce((sum, item) => sum + item.score, 0) / recentScores.length;
+    const olderAverage = olderScores.reduce((sum, item) => sum + item.score, 0) / olderScores.length;
+
+    const difference = recentAverage - olderAverage;
+    const threshold = 0.5; // Minimum change to consider significant
+
+    if (difference > threshold) {
+      return 'up';
+    } else if (difference < -threshold) {
+      return 'down';
+    } else {
+      return 'stable';
+    }
+  } catch (error) {
+    console.error('Error calculating social trend:', error);
+    return 'stable';
+  }
+};
+
 export default function DashboardScreen() {
   const { result } = useLocalSearchParams();
   const data = result ? JSON.parse(result as string) : null;
   
   const [moodScores, setMoodScores] = useState<any[]>([]);
   const [socialScore, setSocialScore] = useState<number | null>(null);
+  const [socialTrend, setSocialTrend] = useState<'up' | 'down' | 'stable'>('stable');
   // --- NEW --- State for the combined overall score
   const [overallScore, setOverallScore] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,6 +78,31 @@ export default function DashboardScreen() {
   // --- NEW STATE FOR SLEEP DATA ---
   const [sleepHours, setSleepHours] = useState<number | null>(null);
   const [sleepScore, setSleepScore] = useState<number | null>(null);
+  const [permissionStatus, setPermissionStatus] = useState<'Unknown' | 'Granted' | 'Denied'>('Unknown');
+  const [isTracking, setIsTracking] = useState<boolean>(false);
+
+  // --- AUTOMATIC SLEEP TRACKING ---
+  const startAutomaticTracking = async () => {
+    if (permissionStatus === 'Granted' && !isTracking) {
+      try {
+        await SleepService.startTracking();
+        setIsTracking(true);
+        console.log('Sleep tracking started automatically');
+      } catch (error: any) {
+        console.error('Failed to start automatic sleep tracking:', error);
+      }
+    }
+  };
+
+  const stopSleepTracking = async () => {
+    try {
+      await SleepService.stopTracking();
+      setIsTracking(false);
+      console.log('Sleep tracking stopped');
+    } catch (error: any) {
+      console.error('Failed to stop sleep tracking:', error);
+    }
+  };
 
   // --- USE EFFECT FOR SLEEP LISTENER ---
   useEffect(() => {
@@ -80,14 +143,15 @@ export default function DashboardScreen() {
           setMoodScores(mockMoodScores);
           // --- NEW --- Set the initial overall score based on mood level alone
           setOverallScore(data.mood_level || 5);
+
         }
 
-      // --- NEW PERMISSION LOGIC ---
-      // Step 1: Request permission as soon as the screen loads.
-      const permissionGranted = await handleCallLogPermission();
+      // --- CALL LOG PERMISSION LOGIC ---
+      // Step 1: Request call log permission as soon as the screen loads.
+      const callLogPermissionGranted = await handleCallLogPermission();
 
       // Step 2: Only proceed if permission was granted.
-      if (permissionGranted) {
+      if (callLogPermissionGranted) {
           console.log("Call Log permission granted. Calculating social score...");
           try {
             // First, ensure the daily history is up-to-date.
@@ -96,6 +160,11 @@ export default function DashboardScreen() {
             // Then, calculate the social score.
             const score = await calculateSocialScore();
             setSocialScore(score); // This will trigger the other useEffect
+            
+            // Calculate the social trend
+            const trend = await calculateSocialTrend();
+            setSocialTrend(trend);
+
           } catch (error) {
             console.error("Failed to calculate social score:", error);
             setSocialScore(5.0); // Set a neutral score on error
@@ -104,7 +173,20 @@ export default function DashboardScreen() {
         // If permission is denied, we can't calculate the score.
         console.log("Call Log permission denied. Social score will not be shown.");
         setSocialScore(null); // Set to null to show '...' or 'N/A' in the UI
+        
       }
+
+      // --- SLEEP PERMISSION LOGIC ---
+      // Step 3: Request sleep permission automatically after call logs
+      try {
+        const sleepPermissionGranted = await SleepService.requestPermission();
+        setPermissionStatus(sleepPermissionGranted ? 'Granted' : 'Denied');
+        console.log("Sleep permission result:", sleepPermissionGranted ? 'Granted' : 'Denied');
+      } catch (error) {
+        console.error("Sleep permission request error:", error);
+        setPermissionStatus('Denied');
+      }
+
 
       setIsLoading(false);
     }
@@ -131,6 +213,15 @@ export default function DashboardScreen() {
     }
   }, [socialScore, data]);
 
+  // --- AUTOMATIC SLEEP TRACKING ---
+  useEffect(() => {
+    if (permissionStatus === 'Granted' && !isTracking) {
+      startAutomaticTracking();
+    } else if (permissionStatus === 'Denied' && isTracking) {
+      stopSleepTracking();
+    }
+  }, [permissionStatus]);
+
   
   // Generate dynamic stats based on mood scores
   const getDynamicStats = (): Array<{
@@ -152,7 +243,7 @@ export default function DashboardScreen() {
         value: socialScore !== null ? `${socialScore.toFixed(1)}` : 'N/A',
         subtitle: socialScore !== null ? 'vs. your average' : 'Permission needed',
         color: '#EF4444',
-        trend: 'up',
+        trend: socialTrend,
         onPress: () => router.push('./social-health')
       },
       {
@@ -176,8 +267,8 @@ export default function DashboardScreen() {
       {
         icon: Moon,
         title: 'Sleep Quality',
-        value: sleepHours ? `${sleepHours.toFixed(1)}h` : 'N/A',
-        subtitle: sleepScore ? `Score: ${sleepScore}/100` : 'No data yet',
+        value: sleepScore ? `${(sleepScore / 10).toFixed(1)}/10` : 'N/A',
+        subtitle: sleepHours ? `${sleepHours.toFixed(1)}h last night` : 'No data yet',
         color: '#8B5CF6',
         trend: 'up',
         onPress: () => router.push('./sleep-quality')
@@ -284,10 +375,13 @@ export default function DashboardScreen() {
                 color={stat.color}
                 trend={stat.trend}
                 onPress={stat.onPress}
+                showViewDetails={true}
               />
             ))}
           </View>
         </View>
+
+
 
         {/* Quick Actions */}
         <QuickActions />
@@ -430,5 +524,6 @@ const styles = StyleSheet.create({
   // Stats section styles
   statsContainer: { paddingHorizontal: 24, marginBottom: 32 },
   sectionTitle: { fontSize: 20, fontWeight: '600', color: '#1F2937', marginBottom: 16 },
-  statsGrid: { flexDirection: 'column', gap: 16 }
+  statsGrid: { flexDirection: 'column', gap: 16 },
+  
 });

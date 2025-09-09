@@ -10,7 +10,7 @@ const HISTORY_LENGTH = 365;
 const MINIMUM_DAYS_FOR_BASELINE = 7;
 
 // --- Type Definitions (unchanged) ---
-type DailySummary = {
+export type DailySummary = {
   date: string;
   outgoingCount: number;
   incomingCount: number;

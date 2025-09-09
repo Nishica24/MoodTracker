@@ -90,3 +90,87 @@ const normalize = (value: number, min: number, max: number): number => {
     const scaledValue = ((value - min) / (max - min)) * 10;
     return Math.max(0, Math.min(10, scaledValue));
 };
+
+/**
+ * Fetches historical social scores for a given period
+ * @param period - 'week', 'month', or 'quarter'
+ * @returns Array of social scores with dates
+ */
+export const getHistoricalSocialScores = async (period: string): Promise<Array<{date: string, score: number}>> => {
+    try {
+        const historyJson = await AsyncStorage.getItem(HISTORY_KEY);
+        const baselineJson = await AsyncStorage.getItem(BASELINE_KEY);
+
+        if (!historyJson || !baselineJson) {
+            console.log('No history or baseline data found');
+            return [];
+        }
+
+        const history: DailySummary[] = JSON.parse(historyJson);
+        const baseline: Baseline = JSON.parse(baselineJson);
+
+        // Filter data based on period
+        const now = new Date();
+        let daysToFetch = 7; // Default to week
+        
+        switch (period) {
+            case 'week':
+                daysToFetch = 7;
+                break;
+            case 'month':
+                daysToFetch = 30;
+                break;
+            case 'quarter':
+                daysToFetch = 90;
+                break;
+        }
+
+        const cutoffDate = new Date(now);
+        cutoffDate.setDate(cutoffDate.getDate() - daysToFetch);
+        const cutoffDateString = cutoffDate.toISOString().split('T')[0];
+
+        // Filter history to the requested period
+        const filteredHistory = history.filter(day => day.date >= cutoffDateString);
+
+        // Calculate social scores for each day
+        const socialScores = filteredHistory.map(day => {
+            let score = 5.0; // Start with neutral score
+
+            // Apply the same scoring logic as calculateSocialScore
+            const outgoingDiff = day.outgoingCount - baseline.avgOutgoing;
+            score += (outgoingDiff * 0.75);
+
+            const incomingDiff = day.incomingCount - baseline.avgIncoming;
+            score += (incomingDiff * 0.4);
+
+            const durationDiff = day.avgDuration - baseline.avgDuration;
+            score += (durationDiff / 150);
+
+            const uniqueContactsDiff = day.uniqueContacts - baseline.avgUniqueContacts;
+            score += (uniqueContactsDiff * 0.5);
+
+            const missedDiff = day.missedCount - baseline.avgMissed;
+            score -= (missedDiff * 1.0);
+
+            const rejectedDiff = day.rejectedCount - baseline.avgRejected;
+            score -= (rejectedDiff * 1.5);
+
+            // Normalize the score
+            const bestCase = 5.0 + (baseline.avgOutgoing * 0.75) + (baseline.avgIncoming * 0.4) + (baseline.avgUniqueContacts * 0.5);
+            const worstCase = 5.0 - (baseline.avgOutgoing * 0.75) - (baseline.avgMissed * 1.0) - (baseline.avgRejected * 1.5);
+            const normalizedScore = normalize(score, worstCase, bestCase);
+
+            return {
+                date: day.date,
+                score: parseFloat(normalizedScore.toFixed(1))
+            };
+        });
+
+        // Sort by date (oldest first for chart display)
+        return socialScores.sort((a, b) => a.date.localeCompare(b.date));
+
+    } catch (error) {
+        console.error('Failed to fetch historical social scores:', error);
+        return [];
+    }
+};
