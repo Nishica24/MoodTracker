@@ -1,7 +1,6 @@
 import { router } from 'expo-router';
 
 export interface ReportData {
-  key_trends: string[];
   weekly_insights: string[];
   improvement_suggestions: string[];
 }
@@ -43,7 +42,7 @@ export const generateAndShowReport = async (
     const reportData = await generateReportFn();
     
     // Check if report has the expected structure
-    if (!reportData || !reportData.key_trends || !reportData.weekly_insights || !reportData.improvement_suggestions) {
+    if (!reportData || !reportData.weekly_insights || !reportData.improvement_suggestions) {
       throw new Error('Invalid report format received');
     }
     

@@ -21,7 +21,6 @@ You are a mental wellness coach. A user has submitted their mood tracking data. 
 Please respond ONLY with a JSON object in *{language}* with the following fields:
 
 {{
-  "key_trends": [],
   "weekly_insights": [],
   "improvement_suggestions": []
 }}
@@ -64,7 +63,7 @@ Use the variable *{json.dumps(mood_data)}* in your response. It is a JSON object
   }}
 }}
 
-Use these values to guide the "key_trends", "weekly_insights", and "improvement_suggestions" sections. For example:
+Use these values to guide the "weekly_insights" and "improvement_suggestions" sections. For example:
 - *Analyze trends:* If *mood_patterns.mood_fluctuations* is "volatile" and *work_stress.work_stress_score* is high, suggest stress-management techniques.
 - *Analyze data points:* If *sleep_pattern.sleep_score* is low and *screentime_usage.average_hours* is high, suggest reducing screen time before bed.
 - *Analyze social health:* Analyze the daily trends in *outgoingCount, **incomingCount, and **missedCount. If **missedCount* or *rejectedCount* are high on certain days, suggest reaching out to those contacts. If *avgDuration* is consistently low, suggest longer, more meaningful conversations.

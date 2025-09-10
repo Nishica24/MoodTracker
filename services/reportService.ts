@@ -33,18 +33,17 @@ interface MoodData {
 }
 
 interface ReportData {
-  key_trends: string[];
   weekly_insights: string[];
   improvement_suggestions: string[];
   error?: string;
   raw?: string;
 }
 
-const BACKEND_URL = 'http://192.168.0.106:5000'; // Updated to use development machine's IP address
+const BACKEND_URL = 'http://locahost:5000'; // Updated to use development machine's IP address
 
 export async function generateMoodReport(moodData: MoodData): Promise<ReportData> {
   try {
-    const response = await fetch(`http://192.168.0.106:5000/generate-mood-report`, {
+    const response = await fetch(`http://localhost:5000/generate-mood-report`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

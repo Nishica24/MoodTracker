@@ -1,13 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
 import { SocialHealthChart } from '@/components/SocialHealthChart';
 import { TrendCard } from '@/components/TrendCard';
-import { SuggestionsBox } from '@/components/SuggestionsBox';
-import { ArrowLeft, Users, MessageCircle, Heart, Calendar } from 'lucide-react-native';
+import { ArrowLeft, Users, MessageCircle, Heart } from 'lucide-react-native';
 import { router } from 'expo-router';
+import { getHistoricalSocialScores } from '@/scoreFunctions/socialScore';
 
 export default function SocialHealthScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState('week');
+  const [socialTrends, setSocialTrends] = useState<Array<{
+    title: string;
+    value: string;
+    trend: 'up' | 'down' | 'stable';
+    description: string;
+  }>>([]);
+  const [isLoadingTrends, setIsLoadingTrends] = useState(true);
 
   const periods = [
     { key: 'week', label: 'Week' },
@@ -15,71 +22,118 @@ export default function SocialHealthScreen() {
     { key: 'quarter', label: '3 Months' },
   ];
 
-  const socialTrends: Array<{
-    title: string;
-    value: string;
-    trend: 'up' | 'down' | 'stable';
-    description: string;
-  }> = [
-    {
+  // Function to analyze social data and generate dynamic trends
+  const analyzeSocialTrends = (socialData: number[]) => {
+    if (socialData.length < 2) {
+      return [
+        {
+          title: 'Social Interactions',
+          value: 'N/A',
+          trend: 'stable' as const,
+          description: 'Not enough data to analyze trends'
+        }
+      ];
+    }
+
+    const trends: Array<{
+      title: string;
+      value: string;
+      trend: 'up' | 'down' | 'stable';
+      description: string;
+    }> = [];
+
+    // Calculate overall trend
+    const firstHalf = socialData.slice(0, Math.floor(socialData.length / 2));
+    const secondHalf = socialData.slice(Math.floor(socialData.length / 2));
+    const firstAvg = firstHalf.reduce((sum, val) => sum + val, 0) / firstHalf.length;
+    const secondAvg = secondHalf.reduce((sum, val) => sum + val, 0) / secondHalf.length;
+    const overallChange = ((secondAvg - firstAvg) / firstAvg) * 100;
+    
+    trends.push({
       title: 'Social Interactions',
-      value: '+15%',
-      trend: 'up',
-      description: 'More frequent social connections'
-    },
-    {
-      title: 'Communication Quality',
-      value: '+8%',
-      trend: 'up',
-      description: 'Better conversation depth'
-    },
-    {
-      title: 'Group Activities',
-      value: '+12%',
-      trend: 'up',
-      description: 'Increased participation in events'
-    },
-    {
-      title: 'Relationship Building',
-      value: '+5%',
-      trend: 'up',
-      description: 'Stronger connections forming'
-    },
-  ];
+      value: `${overallChange >= 0 ? '+' : ''}${overallChange.toFixed(1)}%`,
+      trend: overallChange > 5 ? 'up' : overallChange < -5 ? 'down' : 'stable',
+      description: overallChange > 5 ? 'More frequent social connections' : 
+                  overallChange < -5 ? 'Fewer social interactions' : 
+                  'Consistent social activity'
+    });
 
-  const weeklyInsights = [
-    "Your social interactions have increased by 15% this week, showing positive engagement patterns.",
-    "Wednesday and Thursday were your most social days, with 9.2 and 8.5 interaction scores respectively.",
-    "You've maintained consistent communication with close friends and family members.",
-    "Consider expanding your social circle by joining a new group activity or hobby class."
-  ];
+    // Calculate consistency
+    const variance = socialData.reduce((sum, val) => sum + Math.pow(val - (socialData.reduce((a, b) => a + b) / socialData.length), 2), 0) / socialData.length;
+    const isConsistent = variance < 2;
+    
+    trends.push({
+      title: 'Consistency',
+      value: isConsistent ? 'Stable' : 'Variable',
+      trend: isConsistent ? 'stable' : 'down',
+      description: isConsistent ? 'Consistent social patterns' : 'Variable social activity'
+    });
 
-  const suggestions = [
-    {
-      id: '1',
-      title: 'Join a Social Club',
-      description: 'Consider joining a book club, sports team, or hobby group to meet new people',
-      category: 'activities' as const,
-    },
-    {
-      id: '2',
-      title: 'Improve Communication Skills',
-      description: 'Practice active listening and ask open-ended questions in conversations',
-      category: 'communication' as const,
-    },
-    {
-      id: '3',
-      title: 'Schedule Regular Meetups',
-      description: 'Set up weekly coffee dates or dinner plans with friends to maintain connections',
-      category: 'social' as const,
-    },
-    {
-      id: '4',
-      title: 'Volunteer in Community',
-      description: 'Participate in local community events or volunteer opportunities',
-      category: 'activities' as const,
-    },
-  ];
+    // Calculate peak performance
+    const maxScore = Math.max(...socialData);
+    const minScore = Math.min(...socialData);
+    const range = maxScore - minScore;
+    
+    trends.push({
+      title: 'Performance Range',
+      value: `${range.toFixed(1)}`,
+      trend: range < 2 ? 'stable' : range > 4 ? 'down' : 'up',
+      description: range < 2 ? 'Consistent performance' : 
+                  range > 4 ? 'High variability in social activity' : 
+                  'Moderate variation in social patterns'
+    });
+
+    // Calculate recent momentum
+    const recentScores = socialData.slice(-3);
+    const earlierScores = socialData.slice(-6, -3);
+    const recentAvg = recentScores.reduce((sum, val) => sum + val, 0) / recentScores.length;
+    const earlierAvg = earlierScores.length > 0 ? 
+      earlierScores.reduce((sum, val) => sum + val, 0) / earlierScores.length : recentAvg;
+    const momentum = ((recentAvg - earlierAvg) / earlierAvg) * 100;
+    
+    trends.push({
+      title: 'Recent Momentum',
+      value: `${momentum >= 0 ? '+' : ''}${momentum.toFixed(1)}%`,
+      trend: momentum > 2 ? 'up' : momentum < -2 ? 'down' : 'stable',
+      description: momentum > 2 ? 'Improving social engagement' : 
+                  momentum < -2 ? 'Declining social activity' : 
+                  'Steady social engagement'
+    });
+
+    return trends;
+  };
+
+  // Load and analyze social data when period changes
+  useEffect(() => {
+    const loadSocialData = async () => {
+      setIsLoadingTrends(true);
+      try {
+        const historicalScores = await getHistoricalSocialScores(selectedPeriod);
+        
+        if (historicalScores.length === 0) {
+          // Fallback to static data if no historical data
+          const fallbackData = [7.2, 8.1, 6.8, 9.2, 8.5, 7.9, 8.8];
+          const trends = analyzeSocialTrends(fallbackData);
+          setSocialTrends(trends);
+        } else {
+          const scores = historicalScores.map(item => item.score);
+          const trends = analyzeSocialTrends(scores);
+          setSocialTrends(trends);
+        }
+      } catch (error) {
+        console.error('Error loading social data for trends:', error);
+        // Fallback to static data on error
+        const fallbackData = [7.2, 8.1, 6.8, 9.2, 8.5, 7.9, 8.8];
+        const trends = analyzeSocialTrends(fallbackData);
+        setSocialTrends(trends);
+      } finally {
+        setIsLoadingTrends(false);
+      }
+    };
+
+    loadSocialData();
+  }, [selectedPeriod]);
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -126,29 +180,19 @@ export default function SocialHealthScreen() {
           {/* Key Trends */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Key Trends</Text>
-            <View style={styles.trendsContainer}>
-              {socialTrends.map((trend, index) => (
-                <TrendCard key={index} {...trend} />
-              ))}
-            </View>
+            {isLoadingTrends ? (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>Analyzing your social patterns...</Text>
+              </View>
+            ) : (
+              <View style={styles.trendsContainer}>
+                {socialTrends.map((trend, index) => (
+                  <TrendCard key={index} {...trend} />
+                ))}
+              </View>
+            )}
           </View>
 
-          {/* Weekly Insights */}
-          <View style={styles.insightsCard}>
-            <Calendar size={24} color="#6366F1" />
-            <Text style={styles.insightsTitle}>Weekly Insights</Text>
-            <View style={styles.insightsList}>
-              {weeklyInsights.map((insight, index) => (
-                <View key={index} style={styles.insightItem}>
-                  <View style={styles.bulletPoint} />
-                  <Text style={styles.insightText}>{insight}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* Suggestions Box */}
-          <SuggestionsBox suggestions={suggestions} />
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -240,39 +284,14 @@ const styles = StyleSheet.create({
   trendsContainer: {
     gap: 12,
   },
-  insightsCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
-    flexDirection: 'column',
+  loadingContainer: {
     alignItems: 'center',
-    gap: 16,
+    justifyContent: 'center',
+    paddingVertical: 20,
   },
-  insightsTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  insightsList: {
-    width: '100%',
-    gap: 12,
-  },
-  insightItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  bulletPoint: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#6366F1',
-    marginTop: 6,
-  },
-  insightText: {
+  loadingText: {
     fontSize: 14,
     color: '#6B7280',
-    lineHeight: 20,
-    flex: 1,
+    textAlign: 'center',
   },
 });

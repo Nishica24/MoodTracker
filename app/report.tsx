@@ -4,7 +4,6 @@ import { ArrowLeft, X } from 'lucide-react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
 interface ReportData {
-  key_trends: string[];
   weekly_insights: string[];
   improvement_suggestions: string[];
 }
@@ -88,18 +87,6 @@ export default function ReportScreen() {
           </View>
         </View>
 
-        {/* Key Trends Section */}
-        <View style={styles.reportSection}>
-          <Text style={styles.sectionTitle}>🔍 Key Trends</Text>
-          <View style={styles.trendsCard}>
-            {reportData.key_trends.map((trend: string, index: number) => (
-              <View key={index} style={styles.listItem}>
-                <View style={[styles.bullet, { backgroundColor: '#3B82F6' }]} />
-                <Text style={styles.listText}>{trend}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
 
         {/* Weekly Insights Section */}
         <View style={styles.reportSection}>
