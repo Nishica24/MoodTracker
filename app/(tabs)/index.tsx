@@ -81,6 +81,7 @@ export default function DashboardScreen() {
   const [permissionStatus, setPermissionStatus] = useState<'Unknown' | 'Granted' | 'Denied'>('Unknown');
   const [isTracking, setIsTracking] = useState<boolean>(false);
 
+
   // --- AUTOMATIC SLEEP TRACKING ---
   const startAutomaticTracking = async () => {
     if (permissionStatus === 'Granted' && !isTracking) {
@@ -276,8 +277,8 @@ export default function DashboardScreen() {
       {
         icon: Smartphone,
         title: 'Screen Time',
-        value: '4.2h',
-        subtitle: 'Today',
+        value: '4.2h', // Static value for now
+        subtitle: 'Today', // Static subtitle for now
         color: '#06B6D4',
         trend: 'down',
         onPress: () => router.push('./screen-time')

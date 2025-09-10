@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timezone, timedelta, time
 from flask_pymongo import PyMongo
 from collections import defaultdict
+from Services.groqClient import generate_mood_report
 
 # ---------------- App Setup ----------------
 app = Flask(__name__)
@@ -260,6 +261,30 @@ def test_mood():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# ---------------- Report Generation API ----------------
+
+@app.route('/generate-mood-report', methods=['POST'])
+def generate_report():
+    print('Received request to generate mood report...')
+    mood_data = request.json
+
+    if not mood_data:
+        return jsonify({"error": "Request body must contain mood data."}), 400
+
+    try:
+        # Run the async function in the event loop
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        report = loop.run_until_complete(generate_mood_report(mood_data))
+        loop.close()
+        
+        return jsonify(report), 200
+    except Exception as error:
+        print(f"Failed to generate report: {error}")
+        return jsonify({"error": "Failed to generate report", "details": str(error)}), 500
+
 
 # ---------------- Run ----------------
 if __name__ == "__main__":
