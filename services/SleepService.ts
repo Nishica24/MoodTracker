@@ -30,14 +30,14 @@ const requestPermission = async (): Promise<boolean> => {
         buttonNegative: 'Cancel',
       }
     );
-    
+
     // For Google Play Services permission, we'll assume it's granted if standard permission is granted
     // since the GMS permission is typically granted automatically when the app has the standard permission
     const gmsPermission = standardPermission;
-    
-    const bothGranted = standardPermission === PermissionsAndroid.RESULTS.GRANTED && 
+
+    const bothGranted = standardPermission === PermissionsAndroid.RESULTS.GRANTED &&
                        gmsPermission === PermissionsAndroid.RESULTS.GRANTED;
-    
+
     console.log('Permission results:', { standardPermission, gmsPermission, bothGranted });
     return bothGranted;
   } catch (err) {
@@ -50,7 +50,7 @@ const startTracking = async (): Promise<string> => {
   if (!isSleepModuleAvailable()) {
     throw new Error('Sleep tracking module is not available. This feature requires native Android implementation.');
   }
-  
+
   const hasPermission = await requestPermission();
   if (!hasPermission) {
     throw new Error('Activity Recognition permission was denied.');
@@ -72,7 +72,7 @@ const addSleepListener = (callback: (event: SleepSegment[]) => void) => {
       remove: () => {}
     };
   }
-  
+
   return sleepEventEmitter.addListener('SleepUpdate', (eventJson: string) => {
     try {
       const events: SleepSegment[] = JSON.parse(eventJson);
