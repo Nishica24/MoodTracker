@@ -58,10 +58,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
+    justifyContent: 'space-between',
   },
   actionButton: {
-    flex: 1,
-    minWidth: '45%',
+    width: '48%',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 20,

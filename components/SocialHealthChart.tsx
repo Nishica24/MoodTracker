@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, ActivityIndicator, TouchableOpacity, ScrollView, Modal, SafeAreaView } from 'react-native';
-import { Users, MessageCircle, Heart, FileText, X } from 'lucide-react-native';
+import { View, Text, StyleSheet, Dimensions, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { Users, MessageCircle, Heart, FileText } from 'lucide-react-native';
 import { getHistoricalSocialScores } from '@/scoreFunctions/socialScore';
 import { generateMoodReport, createMockMoodData } from '@/services/reportService';
+import { generateAndShowReport } from '@/utils/reportUtils';
 
 interface SocialHealthChartProps {
   period: string;
@@ -14,8 +15,6 @@ export function SocialHealthChart({ period }: SocialHealthChartProps) {
   const [average, setAverage] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [generatingReport, setGeneratingReport] = useState(false);
-  const [showReport, setShowReport] = useState(false);
-  const [reportData, setReportData] = useState<any>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -69,26 +68,28 @@ export function SocialHealthChart({ period }: SocialHealthChartProps) {
   const handleGenerateReport = async () => {
     setGeneratingReport(true);
     try {
-      // Create mood data from current social scores
-      const moodData = createMockMoodData(socialData);
-      
-      // Generate the report
-      const report = await generateMoodReport(moodData);
-      
-      // Check if report has an error
-      if ((report as any).error) {
-        throw new Error(`Server error: ${(report as any).error}`);
-      }
-      
-      // Check if report has the expected structure
-      if (!report || !report.key_trends || !report.weekly_insights || !report.improvement_suggestions) {
-        throw new Error('Invalid report format received from server');
-      }
-      
-      // Store the report data and show the modal
-      setReportData(report);
-      setShowReport(true);
-      
+      await generateAndShowReport(
+        async () => {
+          // Create mood data from current social scores
+          const moodData = createMockMoodData(socialData);
+          
+          // Generate the report
+          const report = await generateMoodReport(moodData);
+          
+          // Check if report has an error
+          if ((report as any).error) {
+            throw new Error(`Server error: ${(report as any).error}`);
+          }
+          
+          return report;
+        },
+        {
+          title: '📊 Social Health Report',
+          subtitle: 'Track your social wellness journey',
+          averageScore: average,
+          period: period,
+        }
+      );
     } catch (error) {
       console.error('Error generating report:', error);
       alert('Failed to generate report. Please try again.');
@@ -173,93 +174,6 @@ export function SocialHealthChart({ period }: SocialHealthChartProps) {
         </TouchableOpacity>
       </View>
 
-      {/* Report Modal */}
-      <Modal
-        visible={showReport}
-        animationType="slide"
-        presentationStyle="fullScreen"
-        onRequestClose={() => setShowReport(false)}
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>📊 Social Health Report</Text>
-            <TouchableOpacity 
-              style={styles.closeButton}
-              onPress={() => setShowReport(false)}
-            >
-              <X size={24} color="#6B7280" />
-            </TouchableOpacity>
-          </View>
-          
-          <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-            <View style={styles.content}>
-            {reportData && (
-              <>
-                {/* Summary Section */}
-                <View style={styles.reportSectionFirst}>
-                  <Text style={styles.sectionTitle}>Summary</Text>
-                  <View style={styles.summaryCard}>
-                    <Text style={styles.summaryText}>
-                      Average Social Score: <Text style={styles.scoreText}>{average.toFixed(1)}/10</Text>
-                    </Text>
-                    <Text style={styles.summaryText}>
-                      Period: {period.charAt(0).toUpperCase() + period.slice(1)}
-                    </Text>
-                    <Text style={styles.summaryText}>
-                      Generated on: {new Date().toLocaleDateString()}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Key Trends Section */}
-                <View style={styles.reportSection}>
-                  <Text style={styles.sectionTitle}>🔍 Key Trends</Text>
-                  <View style={styles.trendsCard}>
-                    {reportData.key_trends.map((trend: string, index: number) => (
-                      <View key={index} style={styles.listItem}>
-                        <View style={[styles.bullet, { backgroundColor: '#3B82F6' }]} />
-                        <Text style={styles.listText}>{trend}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-
-                {/* Weekly Insights Section */}
-                <View style={styles.reportSection}>
-                  <Text style={styles.sectionTitle}>💡 Weekly Insights</Text>
-                  <View style={styles.insightsCard}>
-                    {reportData.weekly_insights.map((insight: string, index: number) => (
-                      <View key={index} style={styles.listItem}>
-                        <View style={[styles.bullet, { backgroundColor: '#10B981' }]} />
-                        <Text style={styles.listText}>{insight}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-
-                {/* Improvement Suggestions Section */}
-                <View style={styles.reportSection}>
-                  <Text style={styles.sectionTitle}>🎯 Improvement Suggestions</Text>
-                  <View style={styles.suggestionsCard}>
-                    {reportData.improvement_suggestions.map((suggestion: string, index: number) => (
-                      <View key={index} style={styles.listItem}>
-                        <View style={[styles.bullet, { backgroundColor: '#F59E0B' }]} />
-                        <Text style={styles.listText}>{suggestion}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-
-                {/* Test section to ensure scrolling works */}
-                <View style={styles.testSection}>
-                  <Text style={styles.testText}>End of Report - You can scroll to see this!</Text>
-                </View>
-              </>
-            )}
-            </View>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
     </View>
   );
 }
@@ -371,134 +285,5 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: '600',
-  },
-  // Modal styles - matching social health page structure
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 24,
-    backgroundColor: '#F8FAFC',
-  },
-  modalTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#1F2937',
-  },
-  closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'white',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: 24,
-    gap: 24,
-  },
-  // Report section styles
-  reportSection: {
-    gap: 16,
-  },
-  reportSectionFirst: {
-    gap: 16,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  summaryCard: {
-    backgroundColor: '#f3f4f6',
-    padding: 16,
-    borderRadius: 8,
-  },
-  summaryText: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  scoreText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#EF4444',
-  },
-  trendsCard: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  insightsCard: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  suggestionsCard: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-    marginBottom: 24,
-  },
-  listItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  bullet: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginTop: 6,
-    marginRight: 12,
-  },
-  listText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#374151',
-    lineHeight: 20,
-  },
-  testSection: {
-    padding: 20,
-    backgroundColor: '#EFF6FF',
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#3B82F6',
-    borderStyle: 'dashed',
-  },
-  testText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E40AF',
-    textAlign: 'center',
   },
 });
