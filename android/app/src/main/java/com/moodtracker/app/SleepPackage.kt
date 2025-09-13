@@ -1,4 +1,4 @@
-package com.anonymous.boltexponativewind
+package com.moodtracker.app
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule

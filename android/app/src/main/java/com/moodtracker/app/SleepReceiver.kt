@@ -1,4 +1,4 @@
-package com.anonymous.boltexponativewind
+package com.moodtracker.app
 
 import android.content.BroadcastReceiver
 import android.content.Context

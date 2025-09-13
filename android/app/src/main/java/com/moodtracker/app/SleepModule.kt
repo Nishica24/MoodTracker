@@ -1,4 +1,4 @@
-package com.anonymous.boltexponativewind
+package com.moodtracker.app
 
 import android.annotation.SuppressLint
 import android.app.PendingIntent

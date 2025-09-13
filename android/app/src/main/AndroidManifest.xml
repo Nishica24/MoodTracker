@@ -55,7 +55,7 @@
     </activity>
 
     <receiver
-        android:name="com.anonymous.boltexponativewind.SleepReceiver"
+        android:name="com.moodtracker.app.SleepReceiver"
         android:exported="false" />
 
   </application>

@@ -1,4 +1,4 @@
-package com.anonymous.boltexponativewind
+package com.moodtracker.app
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

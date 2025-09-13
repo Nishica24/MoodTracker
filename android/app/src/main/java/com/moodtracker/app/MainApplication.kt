@@ -1,4 +1,4 @@
-package com.anonymous.boltexponativewind
+package com.moodtracker.app
 
 import android.app.Application
 import android.content.res.Configuration
@@ -17,7 +17,7 @@ import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 
 // --- 1. IMPORT YOUR NEW PACKAGE ---
-import com.anonymous.boltexponativewind.SleepPackage
+import com.moodtracker.app.SleepPackage
 
 class MainApplication : Application(), ReactApplication {
 
