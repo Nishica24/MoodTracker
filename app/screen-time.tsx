@@ -1,13 +1,19 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, RefreshControl } from 'react-native';
 import { ScreenTimeChart } from '@/components/ScreenTimeChart';
 import { TrendCard } from '@/components/TrendCard';
 import { SuggestionsBox } from '@/components/SuggestionsBox';
 import { ArrowLeft, Smartphone, TrendingDown, TrendingUp, Calendar, Monitor } from 'lucide-react-native';
 import { router } from 'expo-router';
+import { ScreenTimeService, ScreenTimeData, AppUsageData } from '@/services/ScreenTimeService';
 
 export default function ScreenTimeScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState('week');
+  const [screenTimeData, setScreenTimeData] = useState<ScreenTimeData[]>([]);
+  const [appUsageData, setAppUsageData] = useState<AppUsageData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
 
   const periods = [
     { key: 'week', label: 'Week' },
@@ -15,44 +21,83 @@ export default function ScreenTimeScreen() {
     { key: 'quarter', label: '3 Months' },
   ];
 
-  const screenTimeTrends: Array<{
-    title: string;
-    value: string;
-    trend: 'up' | 'down' | 'stable';
-    description: string;
-  }> = [
-    {
-      title: 'Digital Wellness',
-      value: '+15%',
-      trend: 'up',
-      description: 'Better screen time management'
-    },
-    {
-      title: 'Productive Usage',
-      value: '+12%',
-      trend: 'up',
-      description: 'More purposeful screen time'
-    },
-    {
-      title: 'Social Media Time',
-      value: '-18%',
-      trend: 'down',
-      description: 'Reduced passive scrolling'
-    },
-    {
-      title: 'Break Frequency',
-      value: '+20%',
-      trend: 'up',
-      description: 'More regular screen breaks'
-    },
-  ];
+  useEffect(() => {
+    loadScreenTimeData();
+  }, [selectedPeriod]);
 
-  const weeklyInsights = [
-    "Your screen time has decreased by 15% this week, showing improved digital wellness habits.",
-    "Saturday had the highest screen time at 7.2 hours, likely due to weekend entertainment.",
-    "You've been taking more regular breaks from screens, which has improved focus and productivity.",
-    "Consider setting specific time limits for different apps to further optimize your digital usage."
-  ];
+  const loadScreenTimeData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Check permission
+      const permission = await ScreenTimeService.checkPermission();
+      setHasPermission(permission);
+      
+      if (!permission) {
+        setIsLoading(false);
+        return;
+      }
+
+      // Load screen time and app usage data
+      const [screenData, appData] = await Promise.all([
+        ScreenTimeService.getScreenTimeData(),
+        ScreenTimeService.getAppUsageData()
+      ]);
+      
+      setScreenTimeData(screenData);
+      setAppUsageData(appData);
+    } catch (error) {
+      console.error('Error loading screen time data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadScreenTimeData();
+    setRefreshing(false);
+  };
+
+  // Calculate trends from real data
+  const screenTimeTrends = React.useMemo(() => {
+    if (screenTimeData.length === 0) return [];
+    
+    const trends = ScreenTimeService.calculateScreenTimeTrends(screenTimeData);
+    
+    return [
+      {
+        title: 'Daily Average',
+        value: `${trends.average}h`,
+        trend: trends.trend,
+        description: `Screen time per day`
+      },
+      {
+        title: 'Weekly Total',
+        value: `${trends.total}h`,
+        trend: 'stable' as const,
+        description: `Total screen time this week`
+      },
+      {
+        title: 'Trend Change',
+        value: `${trends.change > 0 ? '+' : ''}${trends.change}%`,
+        trend: trends.trend,
+        description: `Compared to previous period`
+      },
+      {
+        title: 'Top App',
+        value: appUsageData.length > 0 ? `${appUsageData[0].usageHours.toFixed(1)}h` : 'N/A',
+        trend: 'stable' as const,
+        description: `Most used app today`
+      },
+    ];
+  }, [screenTimeData, appUsageData]);
+
+  // Generate insights from real data
+  const weeklyInsights = React.useMemo(() => {
+    if (screenTimeData.length === 0) return [];
+    return ScreenTimeService.generateInsights(screenTimeData, appUsageData);
+  }, [screenTimeData, appUsageData]);
 
   const suggestions = [
     {
@@ -83,7 +128,13 @@ export default function ScreenTimeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         {/* Header with back button */}
         <View style={styles.header}>
           <TouchableOpacity 
@@ -124,28 +175,32 @@ export default function ScreenTimeScreen() {
           <ScreenTimeChart period={selectedPeriod} />
 
           {/* Key Trends */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Key Trends</Text>
-            <View style={styles.trendsContainer}>
-              {screenTimeTrends.map((trend, index) => (
-                <TrendCard key={index} {...trend} />
-              ))}
+          {screenTimeTrends.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Key Trends</Text>
+              <View style={styles.trendsContainer}>
+                {screenTimeTrends.map((trend, index) => (
+                  <TrendCard key={index} {...trend} />
+                ))}
+              </View>
             </View>
-          </View>
+          )}
 
           {/* Weekly Insights */}
-          <View style={styles.insightsCard}>
-            <Calendar size={24} color="#6366F1" />
-            <Text style={styles.insightsTitle}>Weekly Insights</Text>
-            <View style={styles.insightsList}>
-              {weeklyInsights.map((insight, index) => (
-                <View key={index} style={styles.insightItem}>
-                  <View style={styles.bulletPoint} />
-                  <Text style={styles.insightText}>{insight}</Text>
-                </View>
-              ))}
+          {weeklyInsights.length > 0 && (
+            <View style={styles.insightsCard}>
+              <Calendar size={24} color="#6366F1" />
+              <Text style={styles.insightsTitle}>Weekly Insights</Text>
+              <View style={styles.insightsList}>
+                {weeklyInsights.map((insight, index) => (
+                  <View key={index} style={styles.insightItem}>
+                    <View style={styles.bulletPoint} />
+                    <Text style={styles.insightText}>{insight}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
-          </View>
+          )}
 
           {/* Suggestions Box */}
           <SuggestionsBox suggestions={suggestions} />

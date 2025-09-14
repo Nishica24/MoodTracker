@@ -16,8 +16,9 @@ import com.facebook.soloader.SoLoader
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 
-// --- 1. IMPORT YOUR NEW PACKAGE ---
+// --- 1. IMPORT YOUR NEW PACKAGES ---
 import com.moodtracker.app.SleepPackage
+import com.moodtracker.app.ScreenTimePackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -29,8 +30,9 @@ class MainApplication : Application(), ReactApplication {
         // Packages that cannot be autolinked yet can be added manually here, for example:
         // packages.add(MyReactNativePackage())
 
-        // --- 2. ADD THIS LINE TO REGISTER YOUR PACKAGE ---
+        // --- 2. ADD THESE LINES TO REGISTER YOUR PACKAGES ---
         packages.add(SleepPackage())
+        packages.add(ScreenTimePackage())
 
         return packages
       }
