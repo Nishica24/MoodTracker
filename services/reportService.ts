@@ -43,7 +43,7 @@ const BACKEND_URL = 'http://locahost:5000'; // Updated to use development machin
 
 export async function generateMoodReport(moodData: MoodData): Promise<ReportData> {
   try {
-    const response = await fetch(`http://localhost:5000/generate-mood-report`, {
+    const response = await fetch(`http://192.168.56.1:5000/generate-mood-report`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

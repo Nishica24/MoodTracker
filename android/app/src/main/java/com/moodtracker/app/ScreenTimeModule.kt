@@ -8,6 +8,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -48,6 +49,9 @@ class ScreenTimeModule(context: ReactApplicationContext) : ReactContextBaseJavaM
 
     @ReactMethod
     fun getScreenTimeData(promise: Promise) {
+
+        val TAG = "ScreenTimeModule - getScreenTimeData"
+
         try {
             val endTime = System.currentTimeMillis()
             val startTime = endTime - (7 * 24 * 60 * 60 * 1000) // Last 7 days
@@ -63,6 +67,17 @@ class ScreenTimeModule(context: ReactApplicationContext) : ReactContextBaseJavaM
 
             // Group by day and sum screen time
             for (usageStats in usageStatsList) {
+
+                // Convert milliseconds to hours for better readability
+                val timeInForegroundMinutes = usageStats.totalTimeInForeground / (1000 * 60 * 60)
+
+                // Create a custom, readable log message for each object
+                val logMessage = "App: ${usageStats.packageName}, " +
+                        "Usage: $timeInForegroundMinutes minutes, " +
+                        "Last Used: ${java.util.Date(usageStats.lastTimeUsed)}"
+
+                Log.d(TAG, logMessage)
+
                 val date = Date(usageStats.lastTimeUsed)
                 val dayKey = String.format("%tY-%tm-%td", date, date, date)
                 dailyData[dayKey] = (dailyData[dayKey] ?: 0) + usageStats.totalTimeInForeground
