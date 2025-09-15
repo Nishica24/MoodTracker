@@ -2,9 +2,16 @@ import { NativeModules, Platform, PermissionsAndroid } from 'react-native';
 
 const { ScreenTimeModule } = NativeModules;
 
+// Simple logger helper to keep messages consistent
+const log = (...args: any[]) => console.log('[ScreenTimeService]', ...args);
+const warn = (...args: any[]) => console.warn('[ScreenTimeService]', ...args);
+const error = (...args: any[]) => console.error('[ScreenTimeService]', ...args);
+
 // Check if the native module is available
 const isScreenTimeModuleAvailable = () => {
-  return ScreenTimeModule && typeof ScreenTimeModule.checkPermission === 'function';
+  const available = ScreenTimeModule && typeof ScreenTimeModule.checkPermission === 'function';
+  log('Native module availability check:', { available: !!available, platform: Platform.OS });
+  return available;
 };
 
 export interface ScreenTimeData {
@@ -21,21 +28,27 @@ export interface AppUsageData {
 
 const requestPermission = async (): Promise<boolean> => {
   if (Platform.OS !== 'android') {
+    log('requestPermission called on non-Android platform; no permission needed.');
     return true; // iOS doesn't need this permission
   }
 
   try {
     // Check if permission is already granted
+    log('Requesting permission: checking current status...');
     const hasPermission = await ScreenTimeModule.checkPermission();
+    log('Current permission status:', { hasPermission });
     if (hasPermission) {
+      log('Permission already granted; nothing to request.');
       return true;
     }
 
     // Request permission by opening settings
+    log('Permission not granted; invoking ScreenTimeModule.requestPermission (opens settings).');
     await ScreenTimeModule.requestPermission();
+    log('Returned from requestPermission invocation; user must grant manually in settings.');
     return false; // User needs to manually grant permission
   } catch (err) {
-    console.warn('Error requesting screen time permission:', err);
+    warn('Error requesting screen time permission:', err);
     return false;
   }
 };
@@ -46,9 +59,12 @@ const checkPermission = async (): Promise<boolean> => {
   }
 
   try {
-    return await ScreenTimeModule.checkPermission();
+    log('checkPermission: invoking native check (no inputs).');
+    const result = await ScreenTimeModule.checkPermission();
+    log('checkPermission: result from native:', { result });
+    return result;
   } catch (err) {
-    console.warn('Error checking screen time permission:', err);
+    warn('Error checking screen time permission:', err);
     return false;
   }
 };
@@ -59,10 +75,16 @@ const getScreenTimeData = async (): Promise<ScreenTimeData[]> => {
   }
 
   try {
+    log('getScreenTimeData: invoking native method (no inputs).');
     const data = await ScreenTimeModule.getScreenTimeData();
+    log('getScreenTimeData: output summary:', {
+      type: Array.isArray(data) ? 'array' : typeof data,
+      length: Array.isArray(data) ? data.length : undefined,
+      sample: Array.isArray(data) && data.length > 0 ? data[0] : null,
+    });
     return data;
   } catch (err) {
-    console.error('Error getting screen time data:', err);
+    error('Error getting screen time data:', err);
     throw err;
   }
 };
@@ -73,10 +95,16 @@ const getAppUsageData = async (): Promise<AppUsageData[]> => {
   }
 
   try {
+    log('getAppUsageData: invoking native method (no inputs).');
     const data = await ScreenTimeModule.getAppUsageData();
+    log('getAppUsageData: output summary:', {
+      type: Array.isArray(data) ? 'array' : typeof data,
+      length: Array.isArray(data) ? data.length : undefined,
+      top: Array.isArray(data) && data.length > 0 ? data[0] : null,
+    });
     return data;
   } catch (err) {
-    console.error('Error getting app usage data:', err);
+    error('Error getting app usage data:', err);
     throw err;
   }
 };
