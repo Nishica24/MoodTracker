@@ -4,7 +4,7 @@
     "slug": "mood-tracker",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/Mood_Tracker_Logo.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
@@ -13,7 +13,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
+        "foregroundImage": "./assets/images/Mood_Tracker_Logo.png",
         "backgroundColor": "#FFFFFF"
       },
       "package": "com.moodtracker.app"

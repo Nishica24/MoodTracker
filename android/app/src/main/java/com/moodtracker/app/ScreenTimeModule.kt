@@ -69,7 +69,7 @@ class ScreenTimeModule(context: ReactApplicationContext) : ReactContextBaseJavaM
             for (usageStats in usageStatsList) {
 
                 // Convert milliseconds to hours for better readability
-                val timeInForegroundMinutes = usageStats.totalTimeInForeground / (1000 * 60 * 60)
+                val timeInForegroundMinutes = usageStats.totalTimeInForeground / (1000 * 60)
 
                 // Create a custom, readable log message for each object
                 val logMessage = "App: ${usageStats.packageName}, " +
