@@ -7,6 +7,7 @@ onnxruntime>=1.15.0
 transformers>=4.30.0
 tokenizers>=0.13.0
 requests>=2.25.0
+msal>=1.28.0
 
 # Run the test_server.py for the backend
 # It is the main bakend file.

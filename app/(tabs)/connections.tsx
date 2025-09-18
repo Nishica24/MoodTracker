@@ -4,7 +4,8 @@ import {
   TouchableOpacity, Platform, PermissionsAndroid, AppState
 } from 'react-native';
 import { ConnectionCard } from '@/components/ConnectionCard';
-import { Plus, Smartphone, Watch, Calendar, Activity, Headphones, Phone, Moon, LucideProps } from 'lucide-react-native';
+import { Plus, Smartphone, Watch, Calendar, Activity, Headphones, Phone, Moon, Mail, LucideProps } from 'lucide-react-native';
+import { handleMicrosoftLogin, fetchMicrosoftMe } from '@/services/microsoftPermission';
 
 // STEP 3: Import the function from its new location
 import { handleCallLogPermission, openAppSettings } from '@/services/permissions'; // Use your correct path alias or relative path
@@ -23,12 +24,12 @@ type Connection = {
 // --- Initial Data ---
 const initialConnections: Connection[] = [
     {
-      id: '1',
-      name: 'Apple Health',
-      icon: Activity,
-      connected: true,
-      description: 'Sleep, heart rate, and activity data',
-      color: '#FF3B30'
+      id: '1', // Microsoft Outlook
+      name: 'Microsoft Outlook',
+      icon: Mail,
+      connected: false,
+      description: 'Calendar events and email patterns',
+      color: '#0078D4'
     },
     {
       id: '2',
@@ -90,7 +91,7 @@ export default function ConnectionsScreen() {
   const [connections, setConnections] = useState<Connection[]>(initialConnections);
   const appState = useRef(AppState.currentState);
 
-  // The 'handleCallLogPermission' function is now GONE from here.
+  const [msProfileName, setMsProfileName] = useState<string | null>(null);
 
   useEffect(() => {
 
@@ -139,6 +140,24 @@ export default function ConnectionsScreen() {
   }, []);
 
   const toggleConnection = async (id: string) => {
+    if (id === '1') {
+      const isConnected = connections.find(c => c.id === '1')?.connected;
+      if (!isConnected) {
+        const ok = await handleMicrosoftLogin();
+        if (ok) {
+          setConnections(prev => prev.map(c => c.id === '1' ? { ...c, connected: true } : c));
+          try {
+            const me = await fetchMicrosoftMe();
+            setMsProfileName(me?.displayName ?? null);
+          } catch {}
+        }
+      } else {
+        // For simplicity, just mark disconnected locally
+        setConnections(prev => prev.map(c => c.id === '1' ? { ...c, connected: false } : c));
+        setMsProfileName(null);
+      }
+      return;
+    }
 
     // Handle call log permission
     if (id === '6') {
@@ -202,6 +221,9 @@ export default function ConnectionsScreen() {
           <Text style={styles.subtitle}>
             {connectedCount} of {connections.length} apps connected
           </Text>
+          {msProfileName ? (
+            <Text style={[styles.subtitle, { marginTop: 6 }]}>Microsoft: {msProfileName}</Text>
+          ) : null}
         </View>
 
         <View style={styles.content}>

@@ -16,7 +16,7 @@ interface ChartData {
 
 // --- IMPORTANT ---
 // If running on an Android emulator with a local server, use 'http://10.0.2.2:5000'.
-// If on a physical device, use your computer's network IP.
+// If on a physical device over USB, use adb reverse and 'http://localhost:5000'.
 const API_BASE_URL = 'http://localhost:5000';
 
 export function AnalyticsChart({ period, userId }: AnalyticsChartProps) {

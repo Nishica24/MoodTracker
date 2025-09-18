@@ -1,9 +1,11 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, redirect
 from flask_cors import CORS
 import logging
 from datetime import datetime, timezone, timedelta, time
 from flask_pymongo import PyMongo
 from collections import defaultdict
+from datetime import timedelta
+from typing import Dict
 from Services.groqClient import generate_mood_report
 
 # ---------------- App Setup ----------------
@@ -23,6 +25,9 @@ mongo = PyMongo(app)
 
 # Get database
 db = mongo.db
+
+# ---------------- In-memory store for Microsoft login state ----------------
+ms_tokens: Dict[str, dict] = {}
 
 # ---------------- Feature Space ----------------
 goals_list = [
@@ -106,6 +111,59 @@ def home():
 
 
     return jsonify({"message": "Mood Tracker API is running"})
+# ---------------- Minimal Microsoft OAuth Mock ----------------
+
+@app.route('/login', methods=['GET'])
+def ms_login():
+    device_id = request.args.get('device_id', '').strip()
+    if not device_id:
+        return jsonify({"error": "device_id is required"}), 400
+    # Mark device as connected immediately (mock flow), return auto-close HTML
+    ms_tokens[device_id] = {
+        "access_token": "mock",
+        "expires_at": datetime.now(timezone.utc) + timedelta(hours=1)
+    }
+    return (
+        "<html><body><h3>Microsoft account connected (mock).</h3>"
+        "<script>setTimeout(function(){window.close();}, 800);</script>"
+        "</body></html>"
+    )
+
+@app.route('/connection-status', methods=['GET'])
+def connection_status():
+    device_id = request.args.get('device_id', '').strip()
+    if not device_id:
+        return jsonify({"connected": False}), 200
+    token = ms_tokens.get(device_id)
+    connected = bool(token) and token.get('expires_at') and token['expires_at'] > datetime.now(timezone.utc)
+    return jsonify({"connected": connected})
+
+@app.route('/graph/me', methods=['GET'])
+def graph_me():
+    device_id = request.args.get('device_id', '').strip()
+    if not device_id or device_id not in ms_tokens:
+        return jsonify({"error": "not connected"}), 401
+    return jsonify({
+        "displayName": "Mock User",
+        "userPrincipalName": "mock.user@example.com",
+        "id": "123456"
+    })
+
+@app.route('/graph/events', methods=['GET'])
+def graph_events():
+    device_id = request.args.get('device_id', '').strip()
+    if not device_id or device_id not in ms_tokens:
+        return jsonify({"error": "not connected"}), 401
+    return jsonify({
+        "value": [
+            {
+                "subject": "Team Standup",
+                "start": {"dateTime": datetime.now(timezone.utc).isoformat()},
+                "end":   {"dateTime": (datetime.now(timezone.utc)+timedelta(hours=1)).isoformat()},
+            }
+        ]
+    })
+
 
 
 @app.route("/generate-mood-score", methods=["POST"])
