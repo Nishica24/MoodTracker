@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, redirect
+from flask import Flask, request, jsonify, redirect, session, url_for
 from flask_cors import CORS
 import logging
 from datetime import datetime, timezone, timedelta, time
@@ -7,10 +7,20 @@ from collections import defaultdict
 from datetime import timedelta
 from typing import Dict
 from Services.groqClient import generate_mood_report
+import requests
+import secrets
+from dotenv import load_dotenv
+from microsoft_config import get_msal_app, CLIENT_ID, REDIRECT_URI, SCOPES, AUTHORITY
+
+# Load environment variables
+load_dotenv()
 
 # ---------------- App Setup ----------------
 app = Flask(__name__)
 CORS(app)
+
+# Set secret key for sessions
+app.secret_key = secrets.token_hex(32)
 
 # Logging
 logging.basicConfig(level=logging.INFO)
@@ -111,58 +121,236 @@ def home():
 
 
     return jsonify({"message": "Mood Tracker API is running"})
-# ---------------- Minimal Microsoft OAuth Mock ----------------
+# ---------------- Microsoft OAuth Implementation ----------------
 
 @app.route('/login', methods=['GET'])
 def ms_login():
     device_id = request.args.get('device_id', '').strip()
     if not device_id:
         return jsonify({"error": "device_id is required"}), 400
-    # Mark device as connected immediately (mock flow), return auto-close HTML
-    ms_tokens[device_id] = {
-        "access_token": "mock",
-        "expires_at": datetime.now(timezone.utc) + timedelta(hours=1)
-    }
-    return (
-        "<html><body><h3>Microsoft account connected (mock).</h3>"
-        "<script>setTimeout(function(){window.close();}, 800);</script>"
-        "</body></html>"
+    
+    # Store device_id in session for callback
+    session['device_id'] = device_id
+    
+    # Create MSAL app instance
+    app_msal = get_msal_app()
+    
+    # Generate authorization URL
+    auth_url = app_msal.get_authorization_request_url(
+        SCOPES,
+        redirect_uri=REDIRECT_URI,
+        state=secrets.token_urlsafe(32)  # CSRF protection
     )
+    
+    return redirect(auth_url)
+
+@app.route('/auth/callback', methods=['GET'])
+def auth_callback():
+    """Handle OAuth callback from Microsoft"""
+    device_id = session.get('device_id')
+    if not device_id:
+        return jsonify({"error": "No device_id in session"}), 400
+    
+    # Get authorization code from callback
+    code = request.args.get('code')
+    error = request.args.get('error')
+    
+    if error:
+        logger.error(f"OAuth error: {error}")
+        return (
+            "<html><body><h3>Login failed. Please try again.</h3>"
+            "<script>setTimeout(function(){window.close();}, 2000);</script>"
+            "</body></html>"
+        )
+    
+    if not code:
+        return jsonify({"error": "No authorization code received"}), 400
+    
+    try:
+        # Create MSAL app instance
+        app_msal = get_msal_app()
+        
+        # Exchange authorization code for tokens
+        result = app_msal.acquire_token_by_authorization_code(
+            code,
+            scopes=SCOPES,
+            redirect_uri=REDIRECT_URI
+        )
+        
+        if "error" in result:
+            logger.error(f"Token acquisition error: {result.get('error_description')}")
+            return (
+                "<html><body><h3>Token acquisition failed. Please try again.</h3>"
+                "<script>setTimeout(function(){window.close();}, 2000);</script>"
+                "</body></html>"
+            )
+        
+        # Store tokens for the device
+        ms_tokens[device_id] = {
+            "access_token": result["access_token"],
+            "refresh_token": result.get("refresh_token"),
+            "expires_at": datetime.now(timezone.utc) + timedelta(seconds=result.get("expires_in", 3600)),
+            "scope": result.get("scope", ""),
+            "token_type": result.get("token_type", "Bearer")
+        }
+        
+        logger.info(f"Successfully authenticated device: {device_id}")
+        
+        return (
+            "<html><body><h3>Microsoft account connected successfully!</h3>"
+            "<p>You can now close this window.</p>"
+            "<script>setTimeout(function(){window.close();}, 1500);</script>"
+            "</body></html>"
+        )
+        
+    except Exception as e:
+        logger.error(f"Authentication error: {str(e)}")
+        return (
+            "<html><body><h3>Authentication failed. Please try again.</h3>"
+            "<script>setTimeout(function(){window.close();}, 2000);</script>"
+            "</body></html>"
+        )
+
+def refresh_access_token(device_id):
+    """Refresh access token using refresh token"""
+    token_data = ms_tokens.get(device_id)
+    if not token_data or not token_data.get('refresh_token'):
+        return False
+    
+    try:
+        app_msal = get_msal_app()
+        result = app_msal.acquire_token_by_refresh_token(
+            token_data['refresh_token'],
+            scopes=SCOPES
+        )
+        
+        if "error" in result:
+            logger.error(f"Token refresh error: {result.get('error_description')}")
+            return False
+        
+        # Update stored tokens
+        ms_tokens[device_id].update({
+            "access_token": result["access_token"],
+            "expires_at": datetime.now(timezone.utc) + timedelta(seconds=result.get("expires_in", 3600)),
+            "scope": result.get("scope", ""),
+            "token_type": result.get("token_type", "Bearer")
+        })
+        
+        # Update refresh token if provided
+        if result.get("refresh_token"):
+            ms_tokens[device_id]["refresh_token"] = result["refresh_token"]
+        
+        logger.info(f"Successfully refreshed token for device: {device_id}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Token refresh error: {str(e)}")
+        return False
 
 @app.route('/connection-status', methods=['GET'])
 def connection_status():
     device_id = request.args.get('device_id', '').strip()
     if not device_id:
         return jsonify({"connected": False}), 200
+    
     token = ms_tokens.get(device_id)
-    connected = bool(token) and token.get('expires_at') and token['expires_at'] > datetime.now(timezone.utc)
-    return jsonify({"connected": connected})
+    if not token:
+        return jsonify({"connected": False}), 200
+    
+    # Check if token is expired
+    if token.get('expires_at') and token['expires_at'] <= datetime.now(timezone.utc):
+        # Try to refresh the token
+        if refresh_access_token(device_id):
+            return jsonify({"connected": True})
+        else:
+            # Remove invalid token
+            del ms_tokens[device_id]
+            return jsonify({"connected": False})
+    
+    return jsonify({"connected": True})
+
+def get_valid_access_token(device_id):
+    """Get a valid access token, refreshing if necessary"""
+    token_data = ms_tokens.get(device_id)
+    if not token_data:
+        return None
+    
+    # Check if token is expired
+    if token_data.get('expires_at') and token_data['expires_at'] <= datetime.now(timezone.utc):
+        if not refresh_access_token(device_id):
+            return None
+        token_data = ms_tokens.get(device_id)
+    
+    return token_data.get('access_token')
 
 @app.route('/graph/me', methods=['GET'])
 def graph_me():
     device_id = request.args.get('device_id', '').strip()
-    if not device_id or device_id not in ms_tokens:
-        return jsonify({"error": "not connected"}), 401
-    return jsonify({
-        "displayName": "Mock User",
-        "userPrincipalName": "mock.user@example.com",
-        "id": "123456"
-    })
+    if not device_id:
+        return jsonify({"error": "device_id is required"}), 400
+    
+    access_token = get_valid_access_token(device_id)
+    if not access_token:
+        return jsonify({"error": "not connected or token expired"}), 401
+    
+    try:
+        # Call Microsoft Graph API
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        response = requests.get('https://graph.microsoft.com/v1.0/me', headers=headers)
+        
+        if response.status_code == 200:
+            return jsonify(response.json())
+        else:
+            logger.error(f"Graph API error: {response.status_code} - {response.text}")
+            return jsonify({"error": "Failed to fetch user profile"}), response.status_code
+            
+    except Exception as e:
+        logger.error(f"Error calling Graph API: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.route('/graph/events', methods=['GET'])
 def graph_events():
     device_id = request.args.get('device_id', '').strip()
-    if not device_id or device_id not in ms_tokens:
-        return jsonify({"error": "not connected"}), 401
-    return jsonify({
-        "value": [
-            {
-                "subject": "Team Standup",
-                "start": {"dateTime": datetime.now(timezone.utc).isoformat()},
-                "end":   {"dateTime": (datetime.now(timezone.utc)+timedelta(hours=1)).isoformat()},
-            }
-        ]
-    })
+    if not device_id:
+        return jsonify({"error": "device_id is required"}), 400
+    
+    access_token = get_valid_access_token(device_id)
+    if not access_token:
+        return jsonify({"error": "not connected or token expired"}), 401
+    
+    try:
+        # Call Microsoft Graph API for calendar events
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Get events for today
+        today = datetime.now(timezone.utc).strftime('%Y-%m-%dT00:00:00.000Z')
+        tomorrow = (datetime.now(timezone.utc) + timedelta(days=1)).strftime('%Y-%m-%dT00:00:00.000Z')
+        
+        url = f'https://graph.microsoft.com/v1.0/me/events'
+        params = {
+            'startDateTime': today,
+            'endDateTime': tomorrow,
+            '$select': 'subject,start,end,location'
+        }
+        
+        response = requests.get(url, headers=headers, params=params)
+        
+        if response.status_code == 200:
+            return jsonify(response.json())
+        else:
+            logger.error(f"Graph API error: {response.status_code} - {response.text}")
+            return jsonify({"error": "Failed to fetch events"}), response.status_code
+            
+    except Exception as e:
+        logger.error(f"Error calling Graph API: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
 
 
 
