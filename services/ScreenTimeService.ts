@@ -75,7 +75,7 @@ const getScreenTimeData = async (): Promise<ScreenTimeData[]> => {
   }
 
   try {
-    log('getScreenTimeData: invoking native method (no inputs).');
+    log('getScreenTimeData: invoking native method.');
     const data = await ScreenTimeModule.getScreenTimeData();
     log('getScreenTimeData: output summary:', {
       type: Array.isArray(data) ? 'array' : typeof data,

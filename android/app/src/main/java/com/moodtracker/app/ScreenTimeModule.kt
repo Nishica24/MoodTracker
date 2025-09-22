@@ -3,6 +3,8 @@ package com.moodtracker.app
 import android.app.AppOpsManager
 import android.app.usage.UsageStats
 import android.app.usage.UsageStatsManager
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -65,10 +67,27 @@ class ScreenTimeModule(context: ReactApplicationContext) : ReactContextBaseJavaM
             val result = Arguments.createArray()
             val dailyData = mutableMapOf<String, Long>()
 
+            // recevices the launcher package name from the helper private function
+            val launcherPackage = getLauncherPackageName()
+            Log.d(TAG, "Launcher Package: $launcherPackage")
+
             // Group by day and sum screen time
             for (usageStats in usageStatsList) {
 
-                // Convert milliseconds to hours for better readability
+                // If block to skip an app if usage time is zero
+                if (usageStats.totalTimeInForeground == 0L) {
+                    continue
+                }
+
+                // Stores the package name of current usageStats app being viewed from usageStatsList
+                val packageName = usageStats.packageName
+
+                // If block to skip an app if it is a system app or the launcher app
+                if (packageName == launcherPackage || isSystemApp(packageName)) {
+                    continue
+                }
+
+                // Convert milliseconds to minutes for better readability
                 val timeInForegroundMinutes = usageStats.totalTimeInForeground / (1000 * 60)
 
                 // Create a custom, readable log message for each object
@@ -82,6 +101,8 @@ class ScreenTimeModule(context: ReactApplicationContext) : ReactContextBaseJavaM
                 val dayKey = String.format("%tY-%tm-%td", date, date, date)
                 dailyData[dayKey] = (dailyData[dayKey] ?: 0) + usageStats.totalTimeInForeground
             }
+
+            Log.d(TAG, "Daily Data: $dailyData")
 
             // Create array of daily screen time data
             for (i in 6 downTo 0) {
@@ -107,6 +128,9 @@ class ScreenTimeModule(context: ReactApplicationContext) : ReactContextBaseJavaM
 
     @ReactMethod
     fun getAppUsageData(promise: Promise) {
+
+        val TAG = "ScreenTimeModule - getScreenTimeData"
+
         try {
             val endTime = System.currentTimeMillis()
             val startTime = endTime - (24 * 60 * 60 * 1000) // Last 24 hours
@@ -120,17 +144,29 @@ class ScreenTimeModule(context: ReactApplicationContext) : ReactContextBaseJavaM
             val result = Arguments.createArray()
             val appUsageMap = mutableMapOf<String, Long>()
 
+            // recevices the launcher package name from the helper private function
+            val launcherPackage = getLauncherPackageName()
+            Log.d(TAG, "Launcher Package: $launcherPackage")
+
             // Group by package name and sum usage time
             for (usageStats in usageStatsList) {
+
                 if (usageStats.totalTimeInForeground > 0) {
                     val packageName = usageStats.packageName
+
+                    // --- ADD THIS FILTER BLOCK ---
+                    if (packageName == launcherPackage || isSystemApp(packageName)) {
+                        continue // Skip launcher and system apps
+                    }
+                    // --- END OF FILTER BLOCK ---
+
                     appUsageMap[packageName] = (appUsageMap[packageName] ?: 0) + usageStats.totalTimeInForeground
                 }
             }
 
             // Sort by usage time and create result
             val sortedApps = appUsageMap.toList().sortedByDescending { it.second }
-            
+
             for ((packageName, usageTime) in sortedApps.take(10)) { // Top 10 apps
                 val appData = Arguments.createMap()
                 appData.putString("packageName", packageName)
@@ -142,6 +178,31 @@ class ScreenTimeModule(context: ReactApplicationContext) : ReactContextBaseJavaM
             promise.resolve(result)
         } catch (e: Exception) {
             promise.reject("APP_USAGE_ERROR", "Could not get app usage data", e)
+        }
+    }
+
+
+
+    // Private function to get the name of package launcher
+    private fun getLauncherPackageName(): String? {
+        val pm = reactApplicationContext.packageManager
+        val intent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_HOME)
+        }
+        val resolveInfo = pm.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+        return resolveInfo?.activityInfo?.packageName
+    }
+
+
+    // Private function check if an application is system app or not
+    private fun isSystemApp(packageName: String): Boolean {
+        val pm = reactApplicationContext.packageManager
+        return try {
+            val appInfo = pm.getApplicationInfo(packageName, 0)
+            (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+        } catch (e: PackageManager.NameNotFoundException) {
+            e.printStackTrace()
+            true
         }
     }
 }
