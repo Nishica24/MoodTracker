@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, Alert, Modal } from 'react-native';
 import { StatsCard } from '@/components/StatsCard';
 import { QuickActions } from '@/components/QuickActions';
 import { Heart, Zap, Moon, Smartphone, DollarSign, LucideIcon, Plus, TrendingUp } from 'lucide-react-native';
 import { useLocalSearchParams, router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 // --- CORRECTED --- Use relative paths for stability
 import { updateDailyHistory } from '../../services/callLogsServices';
 import { calculateSocialScore, getHistoricalSocialScores } from '../../scoreFunctions/socialScore';
 import { handleCallLogPermission } from '@/services/permissions';
 import { SleepPermissionTester } from '@/components/SleepPermissionTester';
 import { SleepService, SleepSegment } from '@/services/SleepService';
+import { ScreenTimeService } from '@/services/ScreenTimeService';
 
 // --- NEW FUNCTION ---
 /**
@@ -78,6 +80,16 @@ export default function DashboardScreen() {
   const [sleepScore, setSleepScore] = useState<number | null>(null);
   const [permissionStatus, setPermissionStatus] = useState<'Unknown' | 'Granted' | 'Denied'>('Unknown');
   const [isTracking, setIsTracking] = useState<boolean>(false);
+  const [showScreenTimeModal, setShowScreenTimeModal] = useState<boolean>(false);
+  // Ensure the modal is dismissed when the dashboard loses focus (e.g., navigating to details)
+  useFocusEffect(
+    React.useCallback(() => {
+      return () => {
+        setShowScreenTimeModal(false);
+      };
+    }, [])
+  );
+
 
 
   // --- AUTOMATIC SLEEP TRACKING ---
@@ -186,6 +198,16 @@ export default function DashboardScreen() {
         setPermissionStatus('Denied');
       }
 
+      // --- SCREEN TIME PERMISSION LOGIC ---
+      // Step 4: Show custom modal like native prompt; opens settings on Allow
+      try {
+        const hasUsageAccess = await ScreenTimeService.checkPermission();
+        if (!hasUsageAccess) {
+          setShowScreenTimeModal(true);
+        }
+      } catch (error) {
+        console.error('Screen Time permission check/request error:', error);
+      }
 
       setIsLoading(false);
     }
@@ -279,7 +301,10 @@ export default function DashboardScreen() {
         subtitle: 'Today', // Static subtitle for now
         color: '#06B6D4',
         trend: 'down',
-        onPress: () => router.push('./screen-time')
+        onPress: () => {
+          setShowScreenTimeModal(false);
+          router.push('./screen-time');
+        }
       },
     ];
   };
@@ -385,6 +410,46 @@ export default function DashboardScreen() {
         {/* Quick Actions */}
         <QuickActions />
       </ScrollView>
+
+      {/* Screen Time Permission Modal */}
+      <Modal
+        transparent
+        visible={showScreenTimeModal}
+        animationType="slide"
+        onRequestClose={() => setShowScreenTimeModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.permissionSheet}>
+            <View style={styles.permissionIconWrap}>
+              <Smartphone size={28} color="#2563EB" />
+            </View>
+            <Text style={styles.permissionText}>Allow <Text style={{ fontWeight: '700' }}>Mood Tracker</Text> to access your app usage?</Text>
+            <View style={styles.permissionButtons}>
+              <TouchableOpacity
+                style={[styles.permissionButton, styles.primaryButton]}
+                onPress={async () => {
+                  setShowScreenTimeModal(false);
+                  const wasAlreadyGranted = await ScreenTimeService.requestPermission();
+                  if (!wasAlreadyGranted) {
+                    setTimeout(async () => {
+                      const nowGranted = await ScreenTimeService.checkPermission();
+                      console.log('Screen Time permission after prompt:', nowGranted ? 'Granted' : 'Denied');
+                    }, 1500);
+                  }
+                }}
+              >
+                <Text style={styles.primaryButtonText}>Allow</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.permissionButton, styles.secondaryButton]}
+                onPress={() => setShowScreenTimeModal(false)}
+              >
+                <Text style={styles.secondaryButtonText}>Don't allow</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -524,5 +589,62 @@ const styles = StyleSheet.create({
   statsContainer: { paddingHorizontal: 24, marginBottom: 32 },
   sectionTitle: { fontSize: 20, fontWeight: '600', color: '#1F2937', marginBottom: 16 },
   statsGrid: { flexDirection: 'column', gap: 16 },
+  
+  // Permission modal styles
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+  },
+  permissionSheet: {
+    backgroundColor: '#111827',
+    padding: 20,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    gap: 16,
+  },
+  permissionIconWrap: {
+    alignSelf: 'center',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#1F2937',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  permissionText: {
+    color: 'white',
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  permissionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  permissionButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryButton: {
+    backgroundColor: 'white',
+  },
+  primaryButtonText: {
+    color: '#111827',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  secondaryButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#374151',
+  },
+  secondaryButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   
 });

@@ -6,10 +6,12 @@ import {
 import { ConnectionCard } from '@/components/ConnectionCard';
 import { Plus, Smartphone, Watch, Calendar, Activity, Headphones, Phone, Moon, Mail, LucideProps } from 'lucide-react-native';
 import { handleMicrosoftLogin, fetchMicrosoftMe } from '@/services/microsoftPermission';
+import { router } from 'expo-router';
 
 // STEP 3: Import the function from its new location
 import { handleCallLogPermission, openAppSettings } from '@/services/permissions'; // Use your correct path alias or relative path
 import { SleepService } from '@/services/SleepService';
+import { ScreenTimeService } from '@/services/ScreenTimeService';
 
 // --- Type Definitions ---
 type Connection = {
@@ -51,7 +53,7 @@ const initialConnections: Connection[] = [
       id: '4',
       name: 'Screen Time',
       icon: Watch,
-      connected: true,
+      connected: false,
       description: 'App usage and digital wellness',
       color: '#007AFF'
     },
@@ -104,8 +106,14 @@ export default function ConnectionsScreen() {
         // Check sleep permission (activity recognition)
         const hasSleepPermission = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACTIVITY_RECOGNITION);
         
+        // Check screen time permission via native module
+        const hasScreenTimePermission = await ScreenTimeService.checkPermission();
+        
         setConnections(prev =>
           prev.map(conn => {
+            if (conn.id === '4') {
+              return { ...conn, connected: hasScreenTimePermission };
+            } else 
             if (conn.id === '6') {
               return { ...conn, connected: hasCallLogPermission };
             } else if (conn.id === '7') {
@@ -114,6 +122,8 @@ export default function ConnectionsScreen() {
             return conn;
           })
         );
+
+        // No redirection on grant; keep user on current screen
       }
     };
     syncPermissions();
@@ -199,6 +209,25 @@ export default function ConnectionsScreen() {
                 conn.id === id ? { ...conn, connected: isGranted } : conn
               )
             );
+      }
+      return;
+    }
+
+    // Handle screen time permission
+    if (id === '4') {
+      // Check current permission status via native module
+      const hasPermission = await ScreenTimeService.checkPermission();
+
+      if (hasPermission) {
+        openAppSettings();
+      } else {
+        // Request permission (opens settings); returns true only if already granted
+        const isGranted = await ScreenTimeService.requestPermission();
+
+        // Update state based on result
+        setConnections(prev =>
+          prev.map(conn => (conn.id === id ? { ...conn, connected: isGranted } : conn))
+        );
       }
       return;
     }

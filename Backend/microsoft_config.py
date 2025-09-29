@@ -12,10 +12,13 @@ REDIRECT_URI = os.getenv('MS_REDIRECT_URI', 'http://localhost:5000/auth/callback
 
 # Microsoft Graph API scopes
 SCOPES = [
-    'https://graph.microsoft.com/User.Read',
-    'https://graph.microsoft.com/Calendars.Read',
-    'https://graph.microsoft.com/offline_access'  # For refresh tokens
+   "Calendars.Read",
+   "User.Read",
+   "Mail.Read",
+   "MailboxFolder.Read",
+   "Mail.Read.Shared",
 ]
+
 
 # Authority URL
 AUTHORITY = f'https://login.microsoftonline.com/{TENANT_ID}'
