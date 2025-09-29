@@ -22,6 +22,20 @@ export const handleMicrosoftLogin = async (): Promise<boolean> => {
     const base = 'http://localhost:5000';
     const loginUrl = `${base}/login?device_id=${encodeURIComponent(deviceId)}`;
 
+    const pollConnectionStatus = async (maxAttempts = 10, delayMs = 1000): Promise<boolean> => {
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+          const res = await fetch(`${base}/connection-status?device_id=${encodeURIComponent(deviceId)}`);
+          const json = await res.json();
+          if (json?.connected) {
+            return true;
+          }
+        } catch {}
+        await new Promise(r => setTimeout(r, delayMs));
+      }
+      return false;
+    };
+
     if (await InAppBrowser.isAvailable()) {
       const result = await InAppBrowser.open(loginUrl, {
         dismissButtonStyle: 'cancel',
@@ -30,22 +44,14 @@ export const handleMicrosoftLogin = async (): Promise<boolean> => {
         enableDefaultShare: true,
       });
 
-      if (result.type === 'success') {
-          console.log('Login successful');
-        // Optionally call backend to confirm connection
-        const statusRes = await fetch(`${base}/connection-status?device_id=${encodeURIComponent(deviceId)}`);
-        const statusJson = await statusRes.json();
-        return !!statusJson?.connected;
-      } else {
-        throw new Error("Login flow was cancelled or failed.");
-      }
+      // Regardless of the result type, verify with backend since the flow completes in the browser
+      const connected = await pollConnectionStatus();
+      return connected;
     } else {
       Linking.openURL(loginUrl);
       // Fallback: give user a moment, then check status once.
-      await new Promise(r => setTimeout(r, 1500));
-      const statusRes = await fetch(`${base}/connection-status?device_id=${encodeURIComponent(deviceId)}`);
-      const statusJson = await statusRes.json();
-      return !!statusJson?.connected;
+      const connected = await pollConnectionStatus();
+      return connected;
     }
   } catch (error) {
     console.error("Microsoft Login Error:", error);

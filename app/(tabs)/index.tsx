@@ -81,6 +81,39 @@ export default function DashboardScreen() {
   const [permissionStatus, setPermissionStatus] = useState<'Unknown' | 'Granted' | 'Denied'>('Unknown');
   const [isTracking, setIsTracking] = useState<boolean>(false);
   const [showScreenTimeModal, setShowScreenTimeModal] = useState<boolean>(false);
+  const [screenTimeHoursToday, setScreenTimeHoursToday] = useState<number | null>(null);
+  const fetchScreenTimeSummary = async () => {
+    try {
+      const hasUsageAccess = await ScreenTimeService.checkPermission();
+      if (!hasUsageAccess) {
+        setScreenTimeHoursToday(null);
+        return;
+      }
+
+      const data = await ScreenTimeService.getScreenTimeData();
+      if (Array.isArray(data) && data.length > 0) {
+        const latest = data[data.length - 1];
+        const hours = latest?.screenTimeHours ?? (latest?.screenTimeMs ? latest.screenTimeMs / (1000 * 60 * 60) : null);
+        setScreenTimeHoursToday(typeof hours === 'number' ? Math.round(hours * 10) / 10 : null);
+      } else {
+        setScreenTimeHoursToday(null);
+      }
+    } catch (e) {
+      console.error('Failed to fetch screen time summary:', e);
+      setScreenTimeHoursToday(null);
+    }
+  };
+
+  const formatScreenTime = (hours: number | null): string => {
+    if (hours === null || isNaN(hours)) return 'N/A';
+    const totalMinutes = Math.max(0, Math.round(hours * 60));
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    if (h === 0) return `${m} mins`;
+    if (m === 0) return `${h} hrs`;
+    return `${h} hrs ${m} mins`;
+  };
+
   // Ensure the modal is dismissed when the dashboard loses focus (e.g., navigating to details)
   useFocusEffect(
     React.useCallback(() => {
@@ -204,6 +237,8 @@ export default function DashboardScreen() {
         const hasUsageAccess = await ScreenTimeService.checkPermission();
         if (!hasUsageAccess) {
           setShowScreenTimeModal(true);
+        } else {
+          await fetchScreenTimeSummary();
         }
       } catch (error) {
         console.error('Screen Time permission check/request error:', error);
@@ -297,8 +332,8 @@ export default function DashboardScreen() {
       {
         icon: Smartphone,
         title: 'Screen Time',
-        value: '4.2h', // Static value for now
-        subtitle: 'Today', // Static subtitle for now
+        value: formatScreenTime(screenTimeHoursToday),
+        subtitle: 'Today',
         color: '#06B6D4',
         trend: 'down',
         onPress: () => {
@@ -434,7 +469,13 @@ export default function DashboardScreen() {
                     setTimeout(async () => {
                       const nowGranted = await ScreenTimeService.checkPermission();
                       console.log('Screen Time permission after prompt:', nowGranted ? 'Granted' : 'Denied');
+                      if (nowGranted) {
+                        await fetchScreenTimeSummary();
+                      }
                     }, 1500);
+                  }
+                  else {
+                    await fetchScreenTimeSummary();
                   }
                 }}
               >
