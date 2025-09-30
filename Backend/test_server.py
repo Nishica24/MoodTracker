@@ -283,6 +283,163 @@ def get_valid_access_token(device_id):
     
     return token_data.get('access_token')
 
+@app.route('/graph/work-stress', methods=['GET'])
+def graph_work_stress():
+    device_id = request.args.get('device_id', '').strip()
+    period = request.args.get('period', 'week')
+    if not device_id:
+        return jsonify({"error": "device_id is required"}), 400
+
+    access_token = get_valid_access_token(device_id)
+    if not access_token:
+        return jsonify({"error": "not connected or token expired"}), 401
+
+    try:
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json'
+        }
+
+        # Determine date range (default: last 7 days)
+        end_dt = datetime.now(timezone.utc).replace(hour=23, minute=59, second=59, microsecond=0)
+        start_dt = end_dt - timedelta(days=6)
+
+        # Fetch calendar events using calendarView for accurate windowing
+        cal_url = 'https://graph.microsoft.com/v1.0/me/calendarView'
+        cal_params = {
+            'startDateTime': start_dt.isoformat(),
+            'endDateTime': end_dt.isoformat(),
+            '$select': 'subject,start,end,location,organizer',
+            '$top': '1000',
+        }
+        cal_resp = requests.get(cal_url, headers=headers, params=cal_params)
+        if cal_resp.status_code != 200:
+            logger.error(f"Graph calendarView error: {cal_resp.status_code} - {cal_resp.text}")
+            return jsonify({"error": "Failed to fetch calendar events"}), cal_resp.status_code
+        cal_data = cal_resp.json().get('value', [])
+
+        # Fetch recent emails (last 7 days, top N)
+        mail_url = 'https://graph.microsoft.com/v1.0/me/messages'
+        # Filter: received within last 7 days
+        # Using $filter on receivedDateTime ge ISO timestamp
+        mail_params = {
+            '$select': 'subject,receivedDateTime',
+            '$orderby': 'receivedDateTime desc',
+            '$top': '200',
+            '$filter': f"receivedDateTime ge {start_dt.isoformat()}"
+        }
+        mail_resp = requests.get(mail_url, headers=headers, params=mail_params)
+        if mail_resp.status_code != 200:
+            logger.error(f"Graph messages error: {mail_resp.status_code} - {mail_resp.text}")
+            # Don't fail completely; proceed without emails
+            mail_data = []
+        else:
+            mail_data = mail_resp.json().get('value', [])
+
+        # Build per-day aggregates
+        day_keys = []
+        day_start = start_dt
+        for i in range(7):
+            key = (day_start + timedelta(days=i)).date().isoformat()
+            day_keys.append(key)
+
+        events_by_day = {k: [] for k in day_keys}
+        emails_by_day = {k: [] for k in day_keys}
+
+        def clamp(v, lo, hi):
+            return max(lo, min(hi, v))
+
+        # Bucket events by day; count durations and overlaps
+        for ev in cal_data:
+            try:
+                s = ev.get('start', {}).get('dateTime')
+                e = ev.get('end', {}).get('dateTime')
+                if not s or not e:
+                    continue
+                sd = datetime.fromisoformat(s.replace('Z', '+00:00'))
+                ed = datetime.fromisoformat(e.replace('Z', '+00:00'))
+                day_key = sd.date().isoformat()
+                if day_key in events_by_day:
+                    events_by_day[day_key].append((sd, ed, ev))
+            except Exception:
+                continue
+
+        # Bucket emails by day
+        for m in mail_data:
+            try:
+                r = m.get('receivedDateTime')
+                if not r:
+                    continue
+                rd = datetime.fromisoformat(r.replace('Z', '+00:00'))
+                day_key = rd.date().isoformat()
+                if day_key in emails_by_day:
+                    emails_by_day[day_key].append(m)
+            except Exception:
+                continue
+
+        # Heuristic scoring per day (1-10)
+        labels = []
+        data = []
+        for i, day_key in enumerate(day_keys):
+            day_dt = start_dt.date() + timedelta(days=i)
+            labels.append(day_dt.strftime('%a'))
+
+            day_events = sorted(events_by_day.get(day_key, []), key=lambda x: x[0])
+            day_emails = emails_by_day.get(day_key, [])
+
+            # Metrics
+            total_meeting_hours = 0.0
+            back_to_back_count = 0
+            after_hours_emails = 0
+            early_morning_meetings = 0
+
+            last_end = None
+            for sd, ed, _ in day_events:
+                dur = (ed - sd).total_seconds() / 3600.0
+                total_meeting_hours += max(0.0, dur)
+                if last_end is not None and (sd - last_end).total_seconds() <= 15 * 60:
+                    back_to_back_count += 1
+                last_end = ed
+                # Early meetings before 9am local
+                if sd.time() < time(9, 0):
+                    early_morning_meetings += 1
+
+            for m in day_emails:
+                try:
+                    rd = datetime.fromisoformat(m['receivedDateTime'].replace('Z', '+00:00'))
+                    if rd.time() < time(7, 0) or rd.time() > time(19, 0):
+                        after_hours_emails += 1
+                except Exception:
+                    continue
+
+            # Convert metrics to stress score components
+            score = 0.0
+            # Meeting load: map 0-6h → 0-5 points
+            score += clamp(total_meeting_hours / 6.0 * 5.0, 0.0, 5.0)
+            # Back-to-back: each contributes up to 2 points capped at 2
+            score += clamp(back_to_back_count * 0.5, 0.0, 2.0)
+            # After-hours emails: up to 2 points
+            score += clamp(after_hours_emails * 0.3, 0.0, 2.0)
+            # Early meetings: up to 1 point
+            score += clamp(early_morning_meetings * 0.3, 0.0, 1.0)
+
+            # Normalize to 1-10 scale and clamp
+            score = clamp(score * (10.0 / 10.0), 1.0, 10.0)
+            data.append(round(score, 1))
+
+        avg = round(sum(data) / len(data), 1) if data else 0
+
+        return jsonify({
+            'labels': labels,
+            'data': data,
+            'average': avg,
+            'period': period,
+        })
+
+    except Exception as e:
+        logger.error(f"Error computing work stress: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
 @app.route('/graph/me', methods=['GET'])
 def graph_me():
     device_id = request.args.get('device_id', '').strip()

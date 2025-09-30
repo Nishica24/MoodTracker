@@ -74,3 +74,12 @@ export const fetchMicrosoftEvents = async () => {
   if (!res.ok) throw new Error('Failed to fetch events');
   return res.json();
 };
+
+export const fetchWorkStress = async (period: 'week' | 'month' | 'quarter' = 'week') => {
+  const deviceId = await getOrCreateDeviceId();
+  const base = 'http://localhost:5000';
+  const url = `${base}/graph/work-stress?device_id=${encodeURIComponent(deviceId)}&period=${encodeURIComponent(period)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Failed to fetch work stress');
+  return res.json() as Promise<{ labels: string[]; data: number[]; average: number; period: string }>();
+};
