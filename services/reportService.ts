@@ -1,3 +1,9 @@
+// reportService.ts
+
+// ========================================================================
+// SECTION 1: EXISTING INTERFACES (No changes needed here)
+// ========================================================================
+
 interface MoodData {
   mood_patterns: {
     average_mood_score: number;
@@ -32,6 +38,7 @@ interface MoodData {
   };
 }
 
+// This interface is generic and can be reused for the screen time report
 interface ReportData {
   weekly_insights: string[];
   improvement_suggestions: string[];
@@ -39,7 +46,42 @@ interface ReportData {
   raw?: string;
 }
 
-const BACKEND_URL = 'http://locahost:5000'; // Updated to use development machine's IP address
+// ========================================================================
+// SECTION 2: NEW INTERFACES FOR SCREEN TIME
+// These define the data structure for the screen time report.
+// ========================================================================
+
+/**
+ * @description Represents the data for a single day's screen time.
+ */
+interface ScreenTimeDailySummary {
+  date: string;
+  total_hours: number;
+}
+
+/**
+ * @description Represents the usage data for a single application.
+ */
+interface AppUsageSummary {
+  app_name: string;
+  usage_hours: number;
+}
+
+/**
+ * @description The main data structure sent to the backend for generating a screen time report.
+ * This is analogous to the `MoodData` interface.
+ */
+interface ScreenTimeData {
+  daily_screen_time: ScreenTimeDailySummary[];
+  app_usage_breakdown: AppUsageSummary[];
+}
+
+
+// ========================================================================
+// SECTION 3: EXISTING REPORT GENERATION (No changes needed here)
+// ========================================================================
+
+const BACKEND_URL = 'http://localhost:5000'; 
 
 export async function generateMoodReport(moodData: MoodData): Promise<ReportData> {
   try {
@@ -63,6 +105,44 @@ export async function generateMoodReport(moodData: MoodData): Promise<ReportData
   }
 }
 
+// ========================================================================
+// SECTION 4: NEW SCREEN TIME REPORT GENERATION FUNCTION
+// This function sends your screen time data to a new backend endpoint.
+// ========================================================================
+
+/**
+ * @description Sends screen time data to the backend to generate a report.
+ * @param screenTimeData The structured screen time and app usage data.
+ * @returns A promise that resolves to the generated report data.
+ */
+export async function generateScreenTimeReport(screenTimeData: ScreenTimeData): Promise<ReportData> {
+  try {
+    // Note the new endpoint: /generate-screentime-report
+    const response = await fetch(`${BACKEND_URL}/generate-screentime-report`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(screenTimeData),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const reportData = await response.json();
+    return reportData;
+  } catch (error) {
+    console.error('Error generating screen time report:', error);
+    throw new Error('Failed to generate screen time report. Please try again.');
+  }
+}
+
+// ========================================================================
+// SECTION 5: MOCK DATA GENERATORS
+// ========================================================================
+
+// Your existing mock mood data generator (no changes)
 export function createMockMoodData(socialScores: number[]): MoodData {
   const averageSocialScore = socialScores.length > 0 
     ? socialScores.reduce((sum, score) => sum + score, 0) / socialScores.length 
@@ -117,5 +197,35 @@ export function createMockMoodData(socialScores: number[]): MoodData {
       screentime_score: 6.0,
       average_hours: 4.2,
     },
+  };
+}
+
+/**
+ * @description A new helper function to transform your raw service data into the required `ScreenTimeData` format.
+ * @param rawScreenTime - The output from your `getScreenTimeData` service.
+ * @param rawAppUsage - The output from your `getAppUsageData` service.
+ * @returns A structured `ScreenTimeData` object ready to be sent to the backend.
+ */
+export function formatScreenTimeData(
+  rawScreenTime: Array<{ date: string; screenTimeMs: number }>,
+  rawAppUsage: Array<{ packageName: string; usageMs: number }>
+): ScreenTimeData {
+  
+  // Helper to convert milliseconds to hours
+  const msToHours = (ms: number) => ms / (1000 * 60 * 60);
+
+  const daily_screen_time: ScreenTimeDailySummary[] = rawScreenTime.map(item => ({
+    date: item.date,
+    total_hours: msToHours(item.screenTimeMs),
+  }));
+  
+  const app_usage_breakdown: AppUsageSummary[] = rawAppUsage.map(item => ({
+    app_name: item.packageName, // You might want to map package names to real names later
+    usage_hours: msToHours(item.usageMs),
+  }));
+
+  return {
+    daily_screen_time,
+    app_usage_breakdown,
   };
 }

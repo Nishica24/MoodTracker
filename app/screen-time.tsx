@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, RefreshControl } from 'react-native';
 import { ScreenTimeChart } from '@/components/ScreenTimeChart';
 import { TrendCard } from '@/components/TrendCard';
-import { SuggestionsBox } from '@/components/SuggestionsBox';
-import { ArrowLeft, Smartphone, TrendingDown, TrendingUp, Calendar, Monitor } from 'lucide-react-native';
+import { ArrowLeft, Smartphone, TrendingDown, TrendingUp, Monitor } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { ScreenTimeService, ScreenTimeData, AppUsageData } from '@/services/ScreenTimeService';
+import { generateScreenTimeReport, formatScreenTimeData } from '@/services/reportService';
 
 export default function ScreenTimeScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState('week');
@@ -93,38 +93,8 @@ export default function ScreenTimeScreen() {
     ];
   }, [screenTimeData, appUsageData]);
 
-  // Generate insights from real data
-  const weeklyInsights = React.useMemo(() => {
-    if (screenTimeData.length === 0) return [];
-    return ScreenTimeService.generateInsights(screenTimeData, appUsageData);
-  }, [screenTimeData, appUsageData]);
 
-  const suggestions = [
-    {
-      id: '1',
-      title: 'Set App Limits',
-      description: 'Use built-in screen time features to set daily limits for social media and entertainment apps',
-      category: 'activities' as const,
-    },
-    {
-      id: '2',
-      title: 'Schedule Screen-Free Time',
-      description: 'Designate specific hours each day for screen-free activities like reading or exercise',
-      category: 'communication' as const,
-    },
-    {
-      id: '3',
-      title: 'Use Grayscale Mode',
-      description: 'Switch to grayscale mode to make screens less engaging and reduce usage time',
-      category: 'social' as const,
-    },
-    {
-      id: '4',
-      title: 'Practice Mindful Usage',
-      description: 'Before opening an app, ask yourself if it serves a specific purpose or just fills time',
-      category: 'activities' as const,
-    },
-  ];
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -172,7 +142,11 @@ export default function ScreenTimeScreen() {
           </View>
 
           {/* Screen Time Chart */}
-          <ScreenTimeChart period={selectedPeriod} />
+          <ScreenTimeChart 
+            period={selectedPeriod} 
+            screenTimeData={screenTimeData}
+            appUsageData={appUsageData}
+          />
 
           {/* Key Trends */}
           {screenTimeTrends.length > 0 && (
@@ -186,24 +160,8 @@ export default function ScreenTimeScreen() {
             </View>
           )}
 
-          {/* Weekly Insights */}
-          {weeklyInsights.length > 0 && (
-            <View style={styles.insightsCard}>
-              <Calendar size={24} color="#6366F1" />
-              <Text style={styles.insightsTitle}>Weekly Insights</Text>
-              <View style={styles.insightsList}>
-                {weeklyInsights.map((insight, index) => (
-                  <View key={index} style={styles.insightItem}>
-                    <View style={styles.bulletPoint} />
-                    <Text style={styles.insightText}>{insight}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
 
-          {/* Suggestions Box */}
-          <SuggestionsBox suggestions={suggestions} />
+
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -294,40 +252,5 @@ const styles = StyleSheet.create({
   },
   trendsContainer: {
     gap: 12,
-  },
-  insightsCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 16,
-  },
-  insightsTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  insightsList: {
-    width: '100%',
-    gap: 12,
-  },
-  insightItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  bulletPoint: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#6366F1',
-    marginTop: 6,
-  },
-  insightText: {
-    fontSize: 14,
-    color: '#6B7280',
-    lineHeight: 20,
-    flex: 1,
   },
 });

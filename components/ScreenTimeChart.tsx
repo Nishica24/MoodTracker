@@ -1,17 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { Smartphone, TrendingDown, TrendingUp, AlertCircle } from 'lucide-react-native';
-import { ScreenTimeService, ScreenTimeData } from '@/services/ScreenTimeService';
+import { Smartphone, TrendingDown, TrendingUp, AlertCircle, FileText } from 'lucide-react-native';
+import { ScreenTimeService, ScreenTimeData, AppUsageData } from '@/services/ScreenTimeService';
+import { generateScreenTimeReport, formatScreenTimeData } from '@/services/reportService';
+import { router } from 'expo-router';
 
 interface ScreenTimeChartProps {
   period: string;
+  screenTimeData?: ScreenTimeData[];
+  appUsageData?: AppUsageData[];
 }
 
-export function ScreenTimeChart({ period }: ScreenTimeChartProps) {
+export function ScreenTimeChart({ period, screenTimeData: propScreenTimeData, appUsageData: propAppUsageData }: ScreenTimeChartProps) {
   const [screenTimeData, setScreenTimeData] = useState<ScreenTimeData[]>([]);
+  const [appUsageData, setAppUsageData] = useState<AppUsageData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -33,8 +39,20 @@ export function ScreenTimeChart({ period }: ScreenTimeChartProps) {
         return;
       }
 
-      const data = await ScreenTimeService.getScreenTimeData();
-      setScreenTimeData(data);
+      // Use props if available, otherwise fetch data
+      if (propScreenTimeData && propAppUsageData) {
+        setScreenTimeData(propScreenTimeData);
+        setAppUsageData(propAppUsageData);
+      } else {
+        // Load screen time and app usage data
+        const [screenData, appData] = await Promise.all([
+          ScreenTimeService.getScreenTimeData(),
+          ScreenTimeService.getAppUsageData()
+        ]);
+        
+        setScreenTimeData(screenData);
+        setAppUsageData(appData);
+      }
     } catch (err: any) {
       console.error('Error loading screen time data:', err);
       setError(err.message || 'Failed to load screen time data');
@@ -49,6 +67,47 @@ export function ScreenTimeChart({ period }: ScreenTimeChartProps) {
       // Permission request opens settings, user needs to manually grant it
     } catch (err) {
       console.error('Error requesting permission:', err);
+    }
+  };
+
+  const handleGenerateReport = async () => {
+    if (!hasPermission || screenTimeData.length === 0) {
+      return;
+    }
+
+    try {
+      setGeneratingReport(true);
+      
+      // Format the data for the report
+      const formattedData = formatScreenTimeData(
+        screenTimeData.map(d => ({ date: d.date, screenTimeMs: d.screenTimeMs })),
+        appUsageData.map(a => ({ packageName: a.packageName, usageMs: a.usageMs }))
+      );
+      
+      // Generate the report
+      const report = await generateScreenTimeReport(formattedData);
+      
+      // Calculate average screen time for the report
+      const avgScreenTime = screenTimeData.length > 0 
+        ? screenTimeData.reduce((sum, day) => sum + day.screenTimeHours, 0) / screenTimeData.length 
+        : 0;
+
+      // Navigate to report page with the generated data
+      router.push({
+        pathname: '/report',
+        params: { 
+          title: 'Screen Time Report',
+          subtitle: 'Digital Wellness Analysis',
+          averageScore: avgScreenTime,
+          period: period,
+          reportData: JSON.stringify(report)
+        }
+      });
+    } catch (error) {
+      console.error('Error generating screen time report:', error);
+      // You could add a toast or alert here
+    } finally {
+      setGeneratingReport(false);
     }
   };
 
@@ -91,10 +150,36 @@ export function ScreenTimeChart({ period }: ScreenTimeChartProps) {
     );
   }
 
-  const screenTimeHours = screenTimeData.map(day => day.screenTimeHours);
+  const toHours = (d: ScreenTimeData) => {
+    if (typeof d.screenTimeHours === 'number') return d.screenTimeHours;
+    // @ts-ignore support payloads that have only ms
+    if (typeof d.screenTimeMs === 'number') return d.screenTimeMs / (1000 * 60 * 60);
+    return 0;
+  };
+
+  const formatHM = (hours: number) => {
+    const totalMinutes = Math.max(0, Math.round(hours * 60));
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    if (h === 0) return `${m}m`;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}m`;
+  };
+
+  const screenTimeHours = screenTimeData.map(toHours);
   const maxValue = Math.max(...screenTimeHours, 1); // Ensure minimum value for chart
   const chartHeight = 120;
   const average = screenTimeHours.reduce((sum, hours) => sum + hours, 0) / screenTimeHours.length;
+  const labels = screenTimeData.map(d => {
+    try {
+      const dt = new Date(d.date);
+      const weekday = dt.toLocaleDateString(undefined, { weekday: 'short' });
+      const day = dt.getDate();
+      return `${weekday}\n${day}`;
+    } catch {
+      return '';
+    }
+  });
 
   return (
     <View style={styles.container}>
@@ -110,6 +195,7 @@ export function ScreenTimeChart({ period }: ScreenTimeChartProps) {
         <View style={styles.chart}>
           {screenTimeHours.map((value, index) => (
             <View key={index} style={styles.barContainer}>
+              <Text style={styles.valueLabel}>{formatHM(value)}</Text>
               <View
                 style={[
                   styles.bar,
@@ -119,7 +205,7 @@ export function ScreenTimeChart({ period }: ScreenTimeChartProps) {
                   }
                 ]}
               />
-              <Text style={styles.dayLabel}>{days[index]}</Text>
+              <Text style={styles.dayLabel}>{labels[index] || days[index]}</Text>
             </View>
           ))}
         </View>
@@ -138,6 +224,20 @@ export function ScreenTimeChart({ period }: ScreenTimeChartProps) {
             <Text style={styles.legendText}>High (&gt;6h)</Text>
           </View>
         </View>
+
+        {/* Generate Report Button - Only show if permission granted and data available */}
+        {hasPermission && screenTimeData.length > 0 && (
+          <TouchableOpacity 
+            style={styles.generateReportButton} 
+            onPress={handleGenerateReport}
+            disabled={generatingReport}
+          >
+            <FileText size={16} color="white" />
+            <Text style={styles.generateReportButtonText}>
+              {generatingReport ? 'Generating...' : 'Generate Report'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -148,12 +248,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderRadius: 20,
     padding: 20,
+    paddingBottom: 26,
     gap: 16,
+    minHeight: 320,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingRight: 8,
   },
   titleContainer: {
     flexDirection: 'row',
@@ -177,13 +280,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    height: 140,
+    height: 180,
     paddingHorizontal: 8,
+    paddingTop: 24, // reserve space for value labels to avoid header overlap
   },
   barContainer: {
     flex: 1,
     alignItems: 'center',
     gap: 8,
+  },
+  valueLabel: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginBottom: 6,
   },
   bar: {
     width: 16,
@@ -199,6 +308,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 20,
+    paddingTop: 6,
   },
   legendItem: {
     flexDirection: 'row',
@@ -243,6 +353,22 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   permissionButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  generateReportButton: {
+    backgroundColor: '#EF4444',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginTop: 16,
+    gap: 8,
+  },
+  generateReportButtonText: {
     color: 'white',
     fontSize: 14,
     fontWeight: '600',

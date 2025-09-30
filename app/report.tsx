@@ -17,6 +17,10 @@ interface ReportScreenProps {
   onClose?: () => void;
 }
 
+interface ScreenTimeReportData extends ReportData {
+  type?: 'screentime';
+}
+
 export default function ReportScreen() {
   const params = useLocalSearchParams();
   
@@ -26,6 +30,9 @@ export default function ReportScreen() {
   const averageScore = parseFloat(params.averageScore as string) || 0;
   const period = params.period as string || 'week';
   const reportData = params.reportData ? JSON.parse(params.reportData as string) : null;
+  
+  // Check if this is a screen time report
+  const isScreenTimeReport = title.toLowerCase().includes('screen time');
 
   const handleClose = () => {
     if (params.onClose) {
@@ -76,7 +83,13 @@ export default function ReportScreen() {
           <Text style={styles.sectionTitle}>Summary</Text>
           <View style={styles.summaryCard}>
             <Text style={styles.summaryText}>
-              Average Score: <Text style={styles.scoreText}>{averageScore.toFixed(1)}/10</Text>
+              {isScreenTimeReport ? 'Average Screen Time:' : 'Average Score:'} 
+              <Text style={styles.scoreText}>
+                {isScreenTimeReport 
+                  ? ` ${averageScore.toFixed(1)}h` 
+                  : ` ${averageScore.toFixed(1)}/10`
+                }
+              </Text>
             </Text>
             <Text style={styles.summaryText}>
               Period: {period.charAt(0).toUpperCase() + period.slice(1)}

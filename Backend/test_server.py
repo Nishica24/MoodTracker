@@ -531,6 +531,73 @@ def generate_report():
         print(f"Failed to generate report: {error}")
         return jsonify({"error": "Failed to generate report", "details": str(error)}), 500
 
+@app.route('/generate-screentime-report', methods=['POST'])
+def generate_screentime_report():
+    print('Received request to generate screen time report...')
+    screentime_data = request.json
+
+    if not screentime_data:
+        return jsonify({"error": "Request body must contain screen time data."}), 400
+
+    try:
+        # Extract screen time data
+        daily_screen_time = screentime_data.get('daily_screen_time', [])
+        app_usage_breakdown = screentime_data.get('app_usage_breakdown', [])
+        
+        # Calculate insights
+        total_hours = sum(day['total_hours'] for day in daily_screen_time)
+        avg_hours = total_hours / len(daily_screen_time) if daily_screen_time else 0
+        
+        # Generate insights based on screen time data
+        insights = []
+        if avg_hours < 4:
+            insights.append("Great job! Your screen time is well within healthy limits.")
+        elif avg_hours < 6:
+            insights.append("Your screen time is moderate. Consider taking more breaks to maintain digital wellness.")
+        else:
+            insights.append("Your screen time is quite high. Try setting daily limits for different apps.")
+        
+        # Generate trend insights
+        if len(daily_screen_time) >= 2:
+            recent_avg = sum(day['total_hours'] for day in daily_screen_time[-3:]) / min(3, len(daily_screen_time))
+            older_avg = sum(day['total_hours'] for day in daily_screen_time[:-3]) / max(1, len(daily_screen_time) - 3)
+            change_percent = ((recent_avg - older_avg) / older_avg) * 100 if older_avg > 0 else 0
+            
+            if change_percent < -10:
+                insights.append(f"Excellent! You've reduced your screen time by {abs(change_percent):.1f}% recently.")
+            elif change_percent > 10:
+                insights.append(f"Your screen time has increased by {change_percent:.1f}%. Consider setting some boundaries.")
+        
+        # Generate app usage insights
+        if app_usage_breakdown:
+            top_app = app_usage_breakdown[0]
+            if top_app['usage_hours'] > 2:
+                insights.append(f"{top_app['app_name']} is your most used app with {top_app['usage_hours']:.1f} hours today.")
+        
+        # Generate suggestions
+        suggestions = [
+            "Set app limits for social media and entertainment apps",
+            "Schedule screen-free time each day for reading or exercise",
+            "Use grayscale mode to make screens less engaging",
+            "Practice mindful usage - ask yourself if an app serves a purpose before opening it",
+            "Enable focus mode during work or study hours"
+        ]
+        
+        # Add specific suggestions based on usage patterns
+        if avg_hours > 6:
+            suggestions.append("Consider a digital detox day once a week")
+        if any(app['app_name'].lower().find('social') != -1 for app in app_usage_breakdown[:3]):
+            suggestions.append("Limit social media usage to specific times of day")
+        
+        return jsonify({
+            'weekly_insights': insights,
+            'improvement_suggestions': suggestions
+        }), 200
+        
+    except Exception as error:
+        print(f"Failed to generate screen time report: {error}")
+        return jsonify({"error": "Failed to generate screen time report", "details": str(error)}), 500
+
 
 # ---------------- Run ----------------
 if __name__ == "__main__":
