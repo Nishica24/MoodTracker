@@ -81,5 +81,5 @@ export const fetchWorkStress = async (period: 'week' | 'month' | 'quarter' = 'we
   const url = `${base}/graph/work-stress?device_id=${encodeURIComponent(deviceId)}&period=${encodeURIComponent(period)}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to fetch work stress');
-  return res.json() as Promise<{ labels: string[]; data: number[]; average: number; period: string }>();
+  return res.json() as Promise<{ labels: string[]; data: number[]; average: number; period: string }>;
 };

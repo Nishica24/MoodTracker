@@ -193,6 +193,8 @@ def auth_callback():
             "scope": result.get("scope", ""),
             "token_type": result.get("token_type", "Bearer")
         }
+
+#         print("Ms token acquired: ", ms_tokens[device_id])
         
         logger.info(f"Successfully authenticated device: {device_id}")
         
@@ -269,9 +271,34 @@ def connection_status():
     
     return jsonify({"connected": True})
 
+@app.route('/debug-devices', methods=['GET'])
+def debug_devices():
+    """Debug endpoint to see connected device IDs"""
+    connected_devices = []
+    for device_id, token_data in ms_tokens.items():
+        is_expired = token_data.get('expires_at') and token_data['expires_at'] <= datetime.now(timezone.utc)
+        connected_devices.append({
+            "device_id": device_id,
+            "expires_at": token_data.get('expires_at').isoformat() if token_data.get('expires_at') else None,
+            "is_expired": is_expired,
+            "has_refresh_token": bool(token_data.get('refresh_token'))
+        })
+    
+    return jsonify({
+        "total_devices": len(ms_tokens),
+        "devices": connected_devices
+    })
+
+
 def get_valid_access_token(device_id):
     """Get a valid access token, refreshing if necessary"""
+
+#     logger.info(f"Checking ms tokens data in get_valid_access_token function {ms_tokens}")
+
     token_data = ms_tokens.get(device_id)
+
+#     logger.info(f"Printing token_data: {token_data}")
+
     if not token_data:
         return None
     
@@ -285,6 +312,9 @@ def get_valid_access_token(device_id):
 
 @app.route('/graph/work-stress', methods=['GET'])
 def graph_work_stress():
+
+    print("Inside graph work stress")
+
     device_id = request.args.get('device_id', '').strip()
     period = request.args.get('period', 'week')
     if not device_id:
@@ -318,23 +348,67 @@ def graph_work_stress():
             return jsonify({"error": "Failed to fetch calendar events"}), cal_resp.status_code
         cal_data = cal_resp.json().get('value', [])
 
+        print("Logging the calendar data fetched: ", cal_data)
+
         # Fetch recent emails (last 7 days, top N)
         mail_url = 'https://graph.microsoft.com/v1.0/me/messages'
-        # Filter: received within last 7 days
-        # Using $filter on receivedDateTime ge ISO timestamp
+        
+        # For email filter, use start of day to include all emails from that day
+        email_start_dt = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        print(f"Email filter start → {email_start_dt.isoformat()}")
+        
+        # Try without filter first to see if we can get any emails at all
+        mail_params_simple = {
+            '$select': 'subject,receivedDateTime',
+            '$orderby': 'receivedDateTime desc',
+            '$top': '50'
+        }
+        print(f"GET {mail_url} params={mail_params_simple} (simple query)")
+        mail_resp_simple = requests.get(mail_url, headers=headers, params=mail_params_simple)
+        print(f"Simple messages status={mail_resp_simple.status_code}")
+        if mail_resp_simple.status_code != 200:
+            logger.error(f"Graph messages error (simple): {mail_resp_simple.status_code} - {mail_resp_simple.text}")
+            print(f"Simple messages error body: {mail_resp_simple.text}")
+            mail_data = []
+        else:
+            mail_data_simple = mail_resp_simple.json().get('value', [])
+            print(f"Simple query fetched: {len(mail_data_simple)} emails")
+            if mail_data_simple:
+                print(f"Sample email from simple query: {mail_data_simple[0]}")
+                # Filter manually for last 7 days
+                mail_data = []
+                for email in mail_data_simple:
+                    try:
+                        received_dt = datetime.fromisoformat(email['receivedDateTime'].replace('Z', '+00:00'))
+                        if received_dt >= email_start_dt:
+                            mail_data.append(email)
+                    except Exception as ex:
+                        print(f"Error parsing email date: {ex}")
+                print(f"After manual filtering: {len(mail_data)} emails in date range")
+            else:
+                mail_data = []
+                print("No emails found in simple query")
+        
+        # Also try the original filtered query for comparison
         mail_params = {
             '$select': 'subject,receivedDateTime',
             '$orderby': 'receivedDateTime desc',
             '$top': '200',
-            '$filter': f"receivedDateTime ge {start_dt.isoformat()}"
+            '$filter': f"receivedDateTime ge {email_start_dt.isoformat()}"
         }
+        print(f"GET {mail_url} params={mail_params} (filtered query)")
         mail_resp = requests.get(mail_url, headers=headers, params=mail_params)
+        print(f"Filtered messages status={mail_resp.status_code}")
         if mail_resp.status_code != 200:
-            logger.error(f"Graph messages error: {mail_resp.status_code} - {mail_resp.text}")
-            # Don't fail completely; proceed without emails
-            mail_data = []
+            logger.error(f"Graph messages error (filtered): {mail_resp.status_code} - {mail_resp.text}")
+            print(f"Filtered messages error body: {mail_resp.text}")
         else:
-            mail_data = mail_resp.json().get('value', [])
+            mail_data_filtered = mail_resp.json().get('value', [])
+            print(f"Filtered query fetched: {len(mail_data_filtered)} emails")
+            if mail_data_filtered:
+                print(f"Sample email from filtered query: {mail_data_filtered[0]}")
+                # Use filtered data if it worked
+                mail_data = mail_data_filtered
 
         # Build per-day aggregates
         day_keys = []
@@ -440,6 +514,68 @@ def graph_work_stress():
         logger.error(f"Error computing work stress: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
 
+@app.route('/graph/test-mail', methods=['GET'])
+def graph_test_mail():
+    """Test endpoint to debug mail access"""
+    device_id = request.args.get('device_id', '').strip()
+    if not device_id:
+        return jsonify({"error": "device_id is required"}), 400
+    
+    access_token = get_valid_access_token(device_id)
+    if not access_token:
+        return jsonify({"error": "not connected or token expired"}), 401
+    
+    try:
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Test 1: Get user info
+        print("Testing user info...")
+        user_resp = requests.get('https://graph.microsoft.com/v1.0/me', headers=headers)
+        print(f"User info status: {user_resp.status_code}")
+        if user_resp.status_code == 200:
+            user_data = user_resp.json()
+            print(f"User: {user_data.get('displayName', 'Unknown')} ({user_data.get('mail', 'No email')})")
+        
+        # Test 2: Get mail folders
+        print("Testing mail folders...")
+        folders_resp = requests.get('https://graph.microsoft.com/v1.0/me/mailFolders', headers=headers)
+        print(f"Mail folders status: {folders_resp.status_code}")
+        if folders_resp.status_code == 200:
+            folders_data = folders_resp.json().get('value', [])
+            print(f"Found {len(folders_data)} mail folders")
+            for folder in folders_data[:3]:  # Show first 3 folders
+                print(f"  - {folder.get('displayName', 'Unknown')} ({folder.get('totalItemCount', 0)} items)")
+        
+        # Test 3: Get recent messages (no filter)
+        print("Testing recent messages...")
+        messages_resp = requests.get('https://graph.microsoft.com/v1.0/me/messages?$top=10&$select=subject,receivedDateTime', headers=headers)
+        print(f"Recent messages status: {messages_resp.status_code}")
+        if messages_resp.status_code == 200:
+            messages_data = messages_resp.json().get('value', [])
+            print(f"Found {len(messages_data)} recent messages")
+            for msg in messages_data[:3]:  # Show first 3 messages
+                print(f"  - {msg.get('subject', 'No subject')} ({msg.get('receivedDateTime', 'No date')})")
+        else:
+            print(f"Messages error: {messages_resp.text}")
+        
+        return jsonify({
+            "user_status": user_resp.status_code,
+            "folders_status": folders_resp.status_code,
+            "messages_status": messages_resp.status_code,
+            "user_data": user_data if user_resp.status_code == 200 else None,
+            "folders_count": len(folders_data) if folders_resp.status_code == 200 else 0,
+            "messages_count": len(messages_data) if messages_resp.status_code == 200 else 0
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in test-mail: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": "Internal server error"}), 500
+
 @app.route('/graph/me', methods=['GET'])
 def graph_me():
     device_id = request.args.get('device_id', '').strip()
@@ -468,6 +604,7 @@ def graph_me():
     except Exception as e:
         logger.error(f"Error calling Graph API: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
+
 
 @app.route('/graph/events', methods=['GET'])
 def graph_events():
