@@ -83,3 +83,35 @@ export const fetchWorkStress = async (period: 'week' | 'month' | 'quarter' = 'we
   if (!res.ok) throw new Error('Failed to fetch work stress');
   return res.json() as Promise<{ labels: string[]; data: number[]; average: number; period: string }>;
 };
+
+export const fetchDashboardScores = async () => {
+  const deviceId = await getOrCreateDeviceId();
+  const base = 'http://localhost:5000';
+  const url = `${base}/dashboard/scores?device_id=${encodeURIComponent(deviceId)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Failed to fetch dashboard scores');
+  return res.json() as Promise<{
+    work_stress: {
+      score: number;
+      level: string;
+      trend: 'up' | 'down' | 'stable';
+    };
+    email_activity: {
+      score: number;
+      count: number;
+      after_hours: number;
+    };
+    calendar_busyness: {
+      score: number;
+      meeting_hours: number;
+      back_to_back_meetings: number;
+      early_morning_meetings: number;
+    };
+    overall_productivity: {
+      score: number;
+      level: string;
+    };
+    period: string;
+    last_updated: string;
+  }>;
+};

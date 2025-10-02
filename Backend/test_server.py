@@ -892,6 +892,154 @@ def generate_screentime_report():
         print(f"Failed to generate screen time report: {error}")
         return jsonify({"error": "Failed to generate screen time report", "details": str(error)}), 500
 
+        # ---------------- Dashboard Work Stress Scores ---------------- 
+
+@app.route('/dashboard/scores', methods=['GET'])
+def get_dashboard_scores():
+    """Get comprehensive dashboard scores including work stress, email activity, and calendar insights"""
+    device_id = request.args.get('device_id', '').strip()
+    if not device_id:
+        return jsonify({"error": "device_id is required"}), 400
+
+    access_token = get_valid_access_token(device_id)
+    if not access_token:
+        return jsonify({"error": "not connected or token expired"}), 401
+
+    try:
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json'
+        }
+
+        # Get work stress data (reuse existing logic)
+        end_dt = datetime.now(timezone.utc).replace(hour=23, minute=59, second=59, microsecond=0)
+        start_dt = end_dt - timedelta(days=6)
+
+        # Fetch calendar events
+        cal_url = 'https://graph.microsoft.com/v1.0/me/calendarView'
+        cal_params = {
+            'startDateTime': start_dt.isoformat(),
+            'endDateTime': end_dt.isoformat(),
+            '$select': 'subject,start,end,location,organizer',
+            '$top': '1000',
+        }
+        cal_resp = requests.get(cal_url, headers=headers, params=cal_params)
+        cal_data = cal_resp.json().get('value', []) if cal_resp.status_code == 200 else []
+
+        # Fetch recent emails
+        mail_url = 'https://graph.microsoft.com/v1.0/me/messages'
+        email_start_dt = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        mail_params = {
+            '$select': 'subject,receivedDateTime',
+            '$orderby': 'receivedDateTime desc',
+            '$top': '50'
+        }
+        mail_resp = requests.get(mail_url, headers=headers, params=mail_params)
+        mail_data = mail_resp.json().get('value', []) if mail_resp.status_code == 200 else []
+
+        # Filter emails for last 7 days
+        filtered_emails = []
+        for email in mail_data:
+            try:
+                received_dt = datetime.fromisoformat(email['receivedDateTime'].replace('Z', '+00:00'))
+                if received_dt >= email_start_dt:
+                    filtered_emails.append(email)
+            except Exception:
+                continue
+
+        # Calculate work stress score (simplified version)
+        total_meeting_hours = 0.0
+        back_to_back_count = 0
+        after_hours_emails = 0
+        early_morning_meetings = 0
+
+        # Process calendar events
+        events_by_day = defaultdict(list)
+        for ev in cal_data:
+            try:
+                s = ev.get('start', {}).get('dateTime')
+                e = ev.get('end', {}).get('dateTime')
+                if not s or not e:
+                    continue
+                sd = datetime.fromisoformat(s.replace('Z', '+00:00'))
+                ed = datetime.fromisoformat(e.replace('Z', '+00:00'))
+                day_key = sd.date().isoformat()
+                events_by_day[day_key].append((sd, ed, ev))
+            except Exception:
+                continue
+
+        # Calculate metrics
+        for day_events in events_by_day.values():
+            day_events.sort(key=lambda x: x[0])
+            last_end = None
+            for sd, ed, _ in day_events:
+                dur = (ed - sd).total_seconds() / 3600.0
+                total_meeting_hours += max(0.0, dur)
+                if last_end is not None and (sd - last_end).total_seconds() <= 15 * 60:
+                    back_to_back_count += 1
+                last_end = ed
+                if sd.time() < time(9, 0):
+                    early_morning_meetings += 1
+
+        # Process emails
+        for email in filtered_emails:
+            try:
+                rd = datetime.fromisoformat(email['receivedDateTime'].replace('Z', '+00:00'))
+                if rd.time() < time(7, 0) or rd.time() > time(19, 0):
+                    after_hours_emails += 1
+            except Exception:
+                continue
+
+        # Calculate work stress score
+        def clamp(v, lo, hi):
+            return max(lo, min(hi, v))
+
+        work_stress_score = 0.0
+        work_stress_score += clamp(total_meeting_hours / 6.0 * 5.0, 0.0, 5.0)
+        work_stress_score += clamp(back_to_back_count * 0.5, 0.0, 2.0)
+        work_stress_score += clamp(after_hours_emails * 0.3, 0.0, 2.0)
+        work_stress_score += clamp(early_morning_meetings * 0.3, 0.0, 1.0)
+        work_stress_score = clamp(work_stress_score * (10.0 / 10.0), 1.0, 10.0)
+
+        # Calculate email activity score (inverse relationship - more emails = higher stress)
+        email_activity_score = clamp(len(filtered_emails) * 0.2, 1.0, 10.0)
+
+        # Calculate calendar busyness score
+        calendar_busyness_score = clamp(total_meeting_hours * 1.5, 1.0, 10.0)
+
+        # Calculate overall productivity score (combination of all factors)
+        productivity_score = (work_stress_score + email_activity_score + calendar_busyness_score) / 3
+
+        return jsonify({
+            'work_stress': {
+                'score': round(work_stress_score, 1),
+                'level': 'Low' if work_stress_score < 4 else 'Moderate' if work_stress_score < 7 else 'High',
+                'trend': 'down' if work_stress_score < 5 else 'stable' if work_stress_score < 7 else 'up'
+            },
+            'email_activity': {
+                'score': round(email_activity_score, 1),
+                'count': len(filtered_emails),
+                'after_hours': after_hours_emails
+            },
+            'calendar_busyness': {
+                'score': round(calendar_busyness_score, 1),
+                'meeting_hours': round(total_meeting_hours, 1),
+                'back_to_back_meetings': back_to_back_count,
+                'early_morning_meetings': early_morning_meetings
+            },
+            'overall_productivity': {
+                'score': round(productivity_score, 1),
+                'level': 'Low' if productivity_score < 4 else 'Moderate' if productivity_score < 7 else 'High'
+            },
+            'period': 'week',
+            'last_updated': datetime.now(timezone.utc).isoformat()
+        })
+
+    except Exception as e:
+        logger.error(f"Error computing dashboard scores: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
 
 # ---------------- Run ----------------
 if __name__ == "__main__":

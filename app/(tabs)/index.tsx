@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, Alert, Modal } from 'react-native';
 import { StatsCard } from '@/components/StatsCard';
 import { QuickActions } from '@/components/QuickActions';
-import { Heart, Zap, Moon, Smartphone, DollarSign, LucideIcon, Plus, TrendingUp } from 'lucide-react-native';
+import { Heart, Zap, Moon, Smartphone, DollarSign, LucideIcon, Plus, TrendingUp, RefreshCw, Link } from 'lucide-react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 // --- CORRECTED --- Use relative paths for stability
@@ -12,6 +12,7 @@ import { handleCallLogPermission } from '@/services/permissions';
 import { SleepPermissionTester } from '@/components/SleepPermissionTester';
 import { SleepService, SleepSegment } from '@/services/SleepService';
 import { ScreenTimeService } from '@/services/ScreenTimeService';
+import { fetchDashboardScores, handleMicrosoftLogin } from '@/services/microsoftPermission';
 
 // --- NEW FUNCTION ---
 /**
@@ -74,6 +75,9 @@ export default function DashboardScreen() {
   // --- NEW --- State for the combined overall score
   const [overallScore, setOverallScore] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // --- NEW --- State for Microsoft dashboard scores
+  const [dashboardScores, setDashboardScores] = useState<any>(null);
+  const [microsoftConnected, setMicrosoftConnected] = useState<boolean>(false);
 
   // --- NEW STATE FOR SLEEP DATA ---
   const [sleepHours, setSleepHours] = useState<number | null>(null);
@@ -81,7 +85,11 @@ export default function DashboardScreen() {
   const [permissionStatus, setPermissionStatus] = useState<'Unknown' | 'Granted' | 'Denied'>('Unknown');
   const [isTracking, setIsTracking] = useState<boolean>(false);
   const [showScreenTimeModal, setShowScreenTimeModal] = useState<boolean>(false);
+  const [showMicrosoftModal, setShowMicrosoftModal] = useState<boolean>(false);
+  const [shouldShowMicrosoftModal, setShouldShowMicrosoftModal] = useState<boolean>(false);
   const [screenTimeHoursToday, setScreenTimeHoursToday] = useState<number | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [showRefreshOverlay, setShowRefreshOverlay] = useState<boolean>(false);
   const fetchScreenTimeSummary = async () => {
     try {
       const hasUsageAccess = await ScreenTimeService.checkPermission();
@@ -244,6 +252,27 @@ export default function DashboardScreen() {
         console.error('Screen Time permission check/request error:', error);
       }
 
+      // --- MICROSOFT DASHBOARD SCORES ---
+      // Step 5: Fetch live Microsoft data for dashboard scores
+      try {
+        const scores = await fetchDashboardScores();
+        setDashboardScores(scores);
+        setMicrosoftConnected(true);
+        console.log('Microsoft dashboard scores loaded:', scores);
+      } catch (error) {
+        console.error('Failed to fetch Microsoft dashboard scores:', error);
+        setMicrosoftConnected(false);
+        // Set fallback scores if Microsoft is not connected
+        setDashboardScores({
+          work_stress: { score: 4.2, level: 'Moderate', trend: 'stable' },
+          email_activity: { score: 3.5, count: 0, after_hours: 0 },
+          calendar_busyness: { score: 5.0, meeting_hours: 0, back_to_back_meetings: 0, early_morning_meetings: 0 },
+          overall_productivity: { score: 4.2, level: 'Moderate' }
+        });
+        // Store that Microsoft modal should be shown after Screen Time modal
+        setShouldShowMicrosoftModal(true);
+      }
+
       setIsLoading(false);
     }
 
@@ -277,6 +306,108 @@ export default function DashboardScreen() {
       stopSleepTracking();
     }
   }, [permissionStatus]);
+
+  // --- REFRESH ALL SCORES ---
+  const refreshAllScores = async () => {
+    if (isRefreshing) return; // Prevent multiple simultaneous refreshes
+    
+    try {
+      setIsRefreshing(true);
+      setShowRefreshOverlay(true); // Show full page loading overlay
+      console.log('Refreshing all dashboard scores...');
+      
+      // Refresh Microsoft scores
+      try {
+        const scores = await fetchDashboardScores();
+        setDashboardScores(scores);
+        setMicrosoftConnected(true);
+        console.log('Microsoft scores refreshed:', scores);
+      } catch (error) {
+        console.error('Failed to refresh Microsoft scores:', error);
+        setMicrosoftConnected(false);
+      }
+
+      // Refresh social score
+      try {
+        await updateDailyHistory();
+        const socialScore = await calculateSocialScore();
+        setSocialScore(socialScore);
+        const trend = await calculateSocialTrend();
+        setSocialTrend(trend);
+        console.log('Social score refreshed:', socialScore);
+      } catch (error) {
+        console.error('Failed to refresh social score:', error);
+      }
+
+      // Refresh screen time data
+      try {
+        await fetchScreenTimeSummary();
+        console.log('Screen time data refreshed');
+      } catch (error) {
+        console.error('Failed to refresh screen time:', error);
+      }
+
+      // Refresh sleep data (if permission granted)
+      if (permissionStatus === 'Granted') {
+        try {
+          // Sleep data refreshes automatically via listener, but we can trigger a check
+          console.log('Sleep data is being tracked automatically');
+        } catch (error) {
+          console.error('Failed to refresh sleep data:', error);
+        }
+      }
+
+      console.log('All scores refreshed successfully!');
+    } catch (error) {
+      console.error('Error refreshing all scores:', error);
+    } finally {
+      setIsRefreshing(false);
+      // Add a small delay before hiding overlay for better UX
+      setTimeout(() => {
+        setShowRefreshOverlay(false);
+      }, 500);
+    }
+  };
+
+  // --- CONNECT MICROSOFT ACCOUNT ---
+  const connectMicrosoftAccount = async () => {
+    try {
+      console.log('Starting Microsoft login...');
+      setShowMicrosoftModal(false); // Close modal first
+      const connected = await handleMicrosoftLogin();
+      if (connected) {
+        console.log('Microsoft account connected successfully!');
+        setMicrosoftConnected(true);
+        // Fetch all scores immediately after connection
+        await refreshAllScores();
+      } else {
+        console.log('Microsoft login failed or was cancelled');
+        setMicrosoftConnected(false);
+      }
+    } catch (error) {
+      console.error('Microsoft login error:', error);
+      setMicrosoftConnected(false);
+    }
+  };
+
+  // --- AUTO REFRESH ALL SCORES EVERY 5 MINUTES ---
+  useEffect(() => {
+    if (microsoftConnected) {
+      const interval = setInterval(refreshAllScores, 5 * 60 * 1000); // 5 minutes
+      return () => clearInterval(interval);
+    }
+  }, [microsoftConnected]);
+
+  // --- HANDLE SCREEN TIME MODAL DISMISSAL ---
+  useEffect(() => {
+    if (!showScreenTimeModal && shouldShowMicrosoftModal && !microsoftConnected) {
+      // Show Microsoft modal after Screen Time modal is dismissed
+      setTimeout(() => {
+        setShowMicrosoftModal(true);
+        setShouldShowMicrosoftModal(false);
+      }, 500); // Small delay for smooth transition
+    }
+  }, [showScreenTimeModal, shouldShowMicrosoftModal, microsoftConnected]);
 
   
   // Generate dynamic stats based on mood scores
@@ -314,10 +445,10 @@ export default function DashboardScreen() {
       {
         icon: Zap,
         title: 'Work Stress',
-        value: '4.2/10',
-        subtitle: 'Moderate level',
+        value: dashboardScores ? `${dashboardScores.work_stress.score}/10` : '4.2/10',
+        subtitle: dashboardScores ? `${dashboardScores.work_stress.level} level` : 'Moderate level',
         color: '#F59E0B',
-        trend: 'down',
+        trend: dashboardScores ? dashboardScores.work_stress.trend : 'stable',
         onPress: () => router.push('./work-stress')
       },
       {
@@ -350,8 +481,25 @@ export default function DashboardScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.greeting}>{getGreeting()}</Text>
-          <Text style={styles.subtitle}>How are you feeling today?</Text>
+          <View style={styles.headerTop}>
+            <View>
+              <Text style={styles.greeting}>{getGreeting()}</Text>
+              <Text style={styles.subtitle}>How are you feeling today?</Text>
+            </View>
+            <View style={styles.headerActions}>
+              <TouchableOpacity 
+                style={[styles.refreshButton, isRefreshing && styles.refreshButtonDisabled]} 
+                onPress={refreshAllScores}
+                disabled={isRefreshing}
+              >
+                <RefreshCw 
+                  size={20} 
+                  color={isRefreshing ? "#9CA3AF" : "#6366F1"} 
+                  style={isRefreshing ? styles.refreshIconSpinning : null}
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
 
         {/* Current Mood Card - Integrated with your backend data */}
@@ -491,6 +639,51 @@ export default function DashboardScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Microsoft Connection Modal */}
+      <Modal
+        transparent
+        visible={showMicrosoftModal}
+        animationType="slide"
+        onRequestClose={() => setShowMicrosoftModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.permissionSheet}>
+            <View style={styles.permissionIconWrap}>
+              <Link size={28} color="#2563EB" />
+            </View>
+            <Text style={styles.permissionText}>Connect <Text style={{ fontWeight: '700' }}>Microsoft Account</Text> to get live work stress scores?</Text>
+            <Text style={styles.permissionSubtext}>
+              We'll analyze your calendar events and emails to provide real-time wellness insights.
+            </Text>
+            <View style={styles.permissionButtons}>
+              <TouchableOpacity
+                style={[styles.permissionButton, styles.primaryButton]}
+                onPress={connectMicrosoftAccount}
+              >
+                <Text style={styles.primaryButtonText}>Connect</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.permissionButton, styles.secondaryButton]}
+                onPress={() => setShowMicrosoftModal(false)}
+              >
+                <Text style={styles.secondaryButtonText}>Not now</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Refresh Overlay */}
+      {showRefreshOverlay && (
+        <View style={styles.refreshOverlay}>
+          <View style={styles.refreshOverlayContent}>
+            <RefreshCw size={32} color="#6366F1" style={styles.refreshOverlayIcon} />
+            <Text style={styles.refreshOverlayText}>Updating scores...</Text>
+            <Text style={styles.refreshOverlaySubtext}>Please wait while we refresh your wellness data</Text>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -501,6 +694,43 @@ const styles = StyleSheet.create({
   
   // Header styles
   header: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 32 },
+  headerTop: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'flex-start',
+    marginBottom: 8
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  refreshButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refreshButtonDisabled: {
+    backgroundColor: '#F9FAFB',
+  },
+  refreshIconSpinning: {
+    transform: [{ rotate: '360deg' }],
+  },
+  liveDataIndicator: {
+    fontSize: 12,
+    color: '#10B981',
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 8,
+    alignSelf: 'center'
+  },
   greeting: { fontSize: 28, fontWeight: '700', color: '#1F2937', marginBottom: 8 },
   subtitle: { fontSize: 16, color: '#6B7280' },
   
@@ -658,6 +888,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
+  permissionSubtext: {
+    color: '#9CA3AF',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 20,
+  },
   permissionButtons: {
     flexDirection: 'row',
     gap: 12,
@@ -686,6 +923,48 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  
+  // Refresh overlay styles
+  refreshOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(248, 250, 252, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  refreshOverlayContent: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 32,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+    minWidth: 280,
+  },
+  refreshOverlayIcon: {
+    marginBottom: 16,
+    transform: [{ rotate: '360deg' }],
+  },
+  refreshOverlayText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  refreshOverlaySubtext: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   
 });
