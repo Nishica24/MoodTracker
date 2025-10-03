@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, Alert, Modal } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, Alert, Modal, StatusBar } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatsCard } from '@/components/StatsCard';
 import { QuickActions } from '@/components/QuickActions';
 import { Heart, Zap, Moon, Smartphone, DollarSign, LucideIcon, Plus, TrendingUp, RefreshCw, Link } from 'lucide-react-native';
@@ -68,6 +69,7 @@ const calculateSocialTrend = async (): Promise<'up' | 'down' | 'stable'> => {
 export default function DashboardScreen() {
   const { result } = useLocalSearchParams();
   const data = result ? JSON.parse(result as string) : null;
+  const insets = useSafeAreaInsets();
   
   const [moodScores, setMoodScores] = useState<any[]>([]);
   const [socialScore, setSocialScore] = useState<number | null>(null);
@@ -378,8 +380,8 @@ export default function DashboardScreen() {
       if (connected) {
         console.log('Microsoft account connected successfully!');
         setMicrosoftConnected(true);
-        // Fetch all scores immediately after connection
-        await refreshAllScores();
+        // Note: Removed automatic refreshAllScores() call to prevent unwanted page reload
+        // User can manually refresh using the refresh button if needed
       } else {
         console.log('Microsoft login failed or was cancelled');
         setMicrosoftConnected(false);
@@ -479,8 +481,9 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 40 }]}>
           <View style={styles.headerTop}>
             <View>
               <Text style={styles.greeting}>{getGreeting()}</Text>
@@ -693,7 +696,7 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   
   // Header styles
-  header: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 32 },
+  header: { paddingHorizontal: 24, paddingBottom: 32 },
   headerTop: { 
     flexDirection: 'row', 
     justifyContent: 'space-between', 
@@ -731,7 +734,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignSelf: 'center'
   },
-  greeting: { fontSize: 28, fontWeight: '700', color: '#1F2937', marginBottom: 8 },
+  greeting: { fontSize: 28, fontWeight: '700', color: '#1F2937', marginBottom: 8, marginTop: 10 },
   subtitle: { fontSize: 16, color: '#6B7280' },
   
   // Mood Card styles - matching the original design

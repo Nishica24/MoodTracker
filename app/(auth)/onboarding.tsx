@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, TextInput, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, TextInput, Alert, StatusBar } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { CircleCheck as CheckCircle, ArrowRight, User, Target, Activity } from 'lucide-react-native';
 
 export default function OnboardingScreen() {
   const [step, setStep] = useState(1);
+  const insets = useSafeAreaInsets();
 
   type FormData = {
     user_id: number;
@@ -193,8 +195,9 @@ export default function OnboardingScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.progressContainer}>
+        <View style={[styles.progressContainer, { paddingTop: insets.top + 20 }]}>
           <View style={styles.progressBar}>
             <View style={[styles.progressFill, { width: `${(step / 3) * 100}%` }]} />
           </View>

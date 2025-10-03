@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, StatusBar } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Heart, Mail, Lock } from 'lucide-react-native';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const insets = useSafeAreaInsets();
 
   const handleLogin = () => {
     // Simulate login process
@@ -14,7 +16,8 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+      <View style={[styles.content, { paddingTop: insets.top + 20 }]}>
         <View style={styles.header}>
           <Heart size={48} color="#6366F1" />
           <Text style={styles.title}>MoodTracker</Text>
