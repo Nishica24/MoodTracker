@@ -13,7 +13,7 @@ import { handleCallLogPermission } from '@/services/permissions';
 import { SleepPermissionTester } from '@/components/SleepPermissionTester';
 import { SleepService, SleepSegment } from '@/services/SleepService';
 import { ScreenTimeService } from '@/services/ScreenTimeService';
-import { fetchDashboardScores, handleMicrosoftLogin } from '@/services/microsoftPermission';
+import { fetchDashboardScores, handleMicrosoftLogin, checkMicrosoftConnection, setMicrosoftConnectionStatus, getMicrosoftConnectionStatus } from '@/services/microsoftPermission';
 
 // --- NEW FUNCTION ---
 /**
@@ -255,23 +255,40 @@ export default function DashboardScreen() {
       }
 
       // --- MICROSOFT DASHBOARD SCORES ---
-      // Step 5: Fetch live Microsoft data for dashboard scores
+      // Step 5: Check if user has previously connected Microsoft account
       try {
-        const scores = await fetchDashboardScores();
-        setDashboardScores(scores);
-        setMicrosoftConnected(true);
-        console.log('Microsoft dashboard scores loaded:', scores);
+        const isConnected = await checkMicrosoftConnection();
+        const localConnectionStatus = await getMicrosoftConnectionStatus();
+        
+        if (isConnected && localConnectionStatus) {
+          // User is connected, fetch their scores
+          const scores = await fetchDashboardScores();
+          setDashboardScores(scores);
+          setMicrosoftConnected(true);
+          console.log('Microsoft dashboard scores loaded:', scores);
+        } else {
+          // User not connected, show modal and use fallback scores
+          setMicrosoftConnected(false);
+          await setMicrosoftConnectionStatus(false);
+          setDashboardScores({
+            work_stress: { score: 4.2, level: 'Moderate', trend: 'stable' },
+            email_activity: { score: 3.5, count: 0, after_hours: 0 },
+            calendar_busyness: { score: 5.0, meeting_hours: 0, back_to_back_meetings: 0, early_morning_meetings: 0 },
+            overall_productivity: { score: 4.2, level: 'Moderate' }
+          });
+          setShouldShowMicrosoftModal(true);
+        }
       } catch (error) {
-        console.error('Failed to fetch Microsoft dashboard scores:', error);
+        console.error('Microsoft connection check failed:', error);
+        // On error, assume not connected and show modal
         setMicrosoftConnected(false);
-        // Set fallback scores if Microsoft is not connected
+        await setMicrosoftConnectionStatus(false);
         setDashboardScores({
           work_stress: { score: 4.2, level: 'Moderate', trend: 'stable' },
           email_activity: { score: 3.5, count: 0, after_hours: 0 },
           calendar_busyness: { score: 5.0, meeting_hours: 0, back_to_back_meetings: 0, early_morning_meetings: 0 },
           overall_productivity: { score: 4.2, level: 'Moderate' }
         });
-        // Store that Microsoft modal should be shown after Screen Time modal
         setShouldShowMicrosoftModal(true);
       }
 
@@ -318,15 +335,19 @@ export default function DashboardScreen() {
       setShowRefreshOverlay(true); // Show full page loading overlay
       console.log('Refreshing all dashboard scores...');
       
-      // Refresh Microsoft scores
-      try {
-        const scores = await fetchDashboardScores();
-        setDashboardScores(scores);
-        setMicrosoftConnected(true);
-        console.log('Microsoft scores refreshed:', scores);
-      } catch (error) {
-        console.error('Failed to refresh Microsoft scores:', error);
-        setMicrosoftConnected(false);
+      // Refresh Microsoft scores (only if user is connected)
+      if (microsoftConnected) {
+        try {
+          const scores = await fetchDashboardScores();
+          setDashboardScores(scores);
+          setMicrosoftConnected(true);
+          console.log('Microsoft scores refreshed:', scores);
+        } catch (error) {
+          console.error('Failed to refresh Microsoft scores:', error);
+          setMicrosoftConnected(false);
+        }
+      } else {
+        console.log('Microsoft not connected, skipping Microsoft score refresh');
       }
 
       // Refresh social score
@@ -380,15 +401,19 @@ export default function DashboardScreen() {
       if (connected) {
         console.log('Microsoft account connected successfully!');
         setMicrosoftConnected(true);
+        // Save connection status to shared storage for Connections tab
+        await setMicrosoftConnectionStatus(true);
         // Note: Removed automatic refreshAllScores() call to prevent unwanted page reload
         // User can manually refresh using the refresh button if needed
       } else {
         console.log('Microsoft login failed or was cancelled');
         setMicrosoftConnected(false);
+        await setMicrosoftConnectionStatus(false);
       }
     } catch (error) {
       console.error('Microsoft login error:', error);
       setMicrosoftConnected(false);
+      await setMicrosoftConnectionStatus(false);
     }
   };
 

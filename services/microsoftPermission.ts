@@ -84,6 +84,38 @@ export const fetchWorkStress = async (period: 'week' | 'month' | 'quarter' = 'we
   return res.json() as Promise<{ labels: string[]; data: number[]; average: number; period: string }>;
 };
 
+export const checkMicrosoftConnection = async (): Promise<boolean> => {
+  try {
+    const deviceId = await getOrCreateDeviceId();
+    const base = 'http://localhost:5000';
+    const res = await fetch(`${base}/connection-status?device_id=${encodeURIComponent(deviceId)}`);
+    const json = await res.json();
+    return json?.connected || false;
+  } catch (error) {
+    console.error('Failed to check Microsoft connection:', error);
+    return false;
+  }
+};
+
+// Shared Microsoft connection state management
+export const setMicrosoftConnectionStatus = async (connected: boolean): Promise<void> => {
+  try {
+    await AsyncStorage.setItem('microsoft_connected', connected.toString());
+  } catch (error) {
+    console.error('Failed to save Microsoft connection status:', error);
+  }
+};
+
+export const getMicrosoftConnectionStatus = async (): Promise<boolean> => {
+  try {
+    const status = await AsyncStorage.getItem('microsoft_connected');
+    return status === 'true';
+  } catch (error) {
+    console.error('Failed to get Microsoft connection status:', error);
+    return false;
+  }
+};
+
 export const fetchDashboardScores = async () => {
   const deviceId = await getOrCreateDeviceId();
   const base = 'http://localhost:5000';

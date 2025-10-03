@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { ConnectionCard } from '@/components/ConnectionCard';
 import { Plus, Smartphone, Watch, Calendar, Activity, Headphones, Phone, Moon, Mail, LucideProps } from 'lucide-react-native';
-import { handleMicrosoftLogin, fetchMicrosoftMe } from '@/services/microsoftPermission';
+import { handleMicrosoftLogin, fetchMicrosoftMe, getMicrosoftConnectionStatus, setMicrosoftConnectionStatus } from '@/services/microsoftPermission';
 import { router } from 'expo-router';
 
 // STEP 3: Import the function from its new location
@@ -99,6 +99,9 @@ export default function ConnectionsScreen() {
 
     // Function to check which permission have been granted
     const syncPermissions = async () => {
+      // Check Microsoft connection status
+      const microsoftConnected = await getMicrosoftConnectionStatus();
+      
       if (Platform.OS === 'android') {
         // Check call log permission
         const hasCallLogPermission = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_CALL_LOG);
@@ -111,7 +114,9 @@ export default function ConnectionsScreen() {
         
         setConnections(prev =>
           prev.map(conn => {
-            if (conn.id === '4') {
+            if (conn.id === '1') {
+              return { ...conn, connected: microsoftConnected };
+            } else if (conn.id === '4') {
               return { ...conn, connected: hasScreenTimePermission };
             } else 
             if (conn.id === '6') {
@@ -124,6 +129,16 @@ export default function ConnectionsScreen() {
         );
 
         // No redirection on grant; keep user on current screen
+      } else {
+        // For iOS, still check Microsoft connection
+        setConnections(prev =>
+          prev.map(conn => {
+            if (conn.id === '1') {
+              return { ...conn, connected: microsoftConnected };
+            }
+            return conn;
+          })
+        );
       }
     };
     syncPermissions();
@@ -155,15 +170,18 @@ export default function ConnectionsScreen() {
       if (!isConnected) {
         const ok = await handleMicrosoftLogin();
         if (ok) {
+          // Update both local state and shared storage
           setConnections(prev => prev.map(c => c.id === '1' ? { ...c, connected: true } : c));
+          await setMicrosoftConnectionStatus(true);
           try {
             const me = await fetchMicrosoftMe();
             setMsProfileName(me?.displayName ?? null);
           } catch {}
         }
       } else {
-        // For simplicity, just mark disconnected locally
+        // For simplicity, just mark disconnected locally and in shared storage
         setConnections(prev => prev.map(c => c.id === '1' ? { ...c, connected: false } : c));
+        await setMicrosoftConnectionStatus(false);
         setMsProfileName(null);
       }
       return;
