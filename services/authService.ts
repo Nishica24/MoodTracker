@@ -1,3 +1,5 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 const API_BASE_URL = 'http://localhost:5000/api';
 
 export interface User {
@@ -32,8 +34,8 @@ class AuthService {
 
   private async loadToken() {
     try {
-      // In a real app, you'd load from secure storage
-      const stored = localStorage.getItem('auth_token');
+      // Load from AsyncStorage for React Native
+      const stored = await AsyncStorage.getItem('auth_token');
       if (stored) {
         this.token = stored;
       }
@@ -45,8 +47,8 @@ class AuthService {
   private async saveToken(token: string) {
     try {
       this.token = token;
-      // In a real app, you'd save to secure storage
-      localStorage.setItem('auth_token', token);
+      // Save to AsyncStorage for React Native
+      await AsyncStorage.setItem('auth_token', token);
     } catch (error) {
       console.error('Error saving token:', error);
     }
@@ -55,7 +57,7 @@ class AuthService {
   private async clearToken() {
     try {
       this.token = null;
-      localStorage.removeItem('auth_token');
+      await AsyncStorage.removeItem('auth_token');
     } catch (error) {
       console.error('Error clearing token:', error);
     }
