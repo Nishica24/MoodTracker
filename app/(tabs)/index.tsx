@@ -13,7 +13,7 @@ import { handleCallLogPermission } from '@/services/permissions';
 import { SleepPermissionTester } from '@/components/SleepPermissionTester';
 import { SleepService, SleepSegment } from '@/services/SleepService';
 import { ScreenTimeService } from '@/services/ScreenTimeService';
-import { fetchDashboardScores, handleMicrosoftLogin, checkMicrosoftConnection, setMicrosoftConnectionStatus, getMicrosoftConnectionStatus } from '@/services/microsoftPermission';
+import { fetchDashboardScores, fetchWorkStress, handleMicrosoftLogin, checkMicrosoftConnection, setMicrosoftConnectionStatus, getMicrosoftConnectionStatus, setMicrosoftModalShown, getMicrosoftModalShown } from '@/services/microsoftPermission';
 
 // --- NEW FUNCTION ---
 /**
@@ -267,29 +267,45 @@ export default function DashboardScreen() {
           setMicrosoftConnected(true);
           console.log('Microsoft dashboard scores loaded:', scores);
         } else {
-          // User not connected, show modal and use fallback scores
+          // User not connected, use static fallback data
           setMicrosoftConnected(false);
           await setMicrosoftConnectionStatus(false);
+          
+          // Use static fallback data when Microsoft is not connected
           setDashboardScores({
             work_stress: { score: 4.2, level: 'Moderate', trend: 'stable' },
             email_activity: { score: 3.5, count: 0, after_hours: 0 },
             calendar_busyness: { score: 5.0, meeting_hours: 0, back_to_back_meetings: 0, early_morning_meetings: 0 },
             overall_productivity: { score: 4.2, level: 'Moderate' }
           });
-          setShouldShowMicrosoftModal(true);
+          console.log('Using static work stress data - Microsoft not connected');
+          
+          // Only show Microsoft modal if user hasn't been shown it before
+          const hasBeenShown = await getMicrosoftModalShown();
+          if (!hasBeenShown) {
+            setShouldShowMicrosoftModal(true);
+          }
         }
       } catch (error) {
         console.error('Microsoft connection check failed:', error);
-        // On error, assume not connected and show modal
+        // On error, use static fallback data
         setMicrosoftConnected(false);
         await setMicrosoftConnectionStatus(false);
+        
+        // Use static fallback data when there's an error
         setDashboardScores({
           work_stress: { score: 4.2, level: 'Moderate', trend: 'stable' },
           email_activity: { score: 3.5, count: 0, after_hours: 0 },
           calendar_busyness: { score: 5.0, meeting_hours: 0, back_to_back_meetings: 0, early_morning_meetings: 0 },
           overall_productivity: { score: 4.2, level: 'Moderate' }
         });
-        setShouldShowMicrosoftModal(true);
+        console.log('Using static work stress data - Microsoft connection check failed');
+        
+        // Only show Microsoft modal if user hasn't been shown it before
+        const hasBeenShown = await getMicrosoftModalShown();
+        if (!hasBeenShown) {
+          setShouldShowMicrosoftModal(true);
+        }
       }
 
       setIsLoading(false);
@@ -347,7 +363,9 @@ export default function DashboardScreen() {
           setMicrosoftConnected(false);
         }
       } else {
-        console.log('Microsoft not connected, skipping Microsoft score refresh');
+        console.log('Microsoft not connected, skipping work stress refresh');
+        // When Microsoft is not connected, work stress data remains static
+        // No need to attempt fetching live data as it will fail
       }
 
       // Refresh social score
@@ -397,6 +415,7 @@ export default function DashboardScreen() {
     try {
       console.log('Starting Microsoft login...');
       setShowMicrosoftModal(false); // Close modal first
+      await setMicrosoftModalShown(true); // Mark as shown regardless of connection result
       const connected = await handleMicrosoftLogin();
       if (connected) {
         console.log('Microsoft account connected successfully!');
@@ -680,7 +699,7 @@ export default function DashboardScreen() {
             <View style={styles.permissionIconWrap}>
               <Link size={28} color="#2563EB" />
             </View>
-            <Text style={styles.permissionText}>Connect <Text style={{ fontWeight: '700' }}>Microsoft Account</Text> to get live work stress scores?</Text>
+            <Text style={styles.permissionText}>Allow <Text style={{ fontWeight: '700' }}>Mood Tracker</Text> to access your Microsoft account?</Text>
             <Text style={styles.permissionSubtext}>
               We'll analyze your calendar events and emails to provide real-time wellness insights.
             </Text>
@@ -689,13 +708,16 @@ export default function DashboardScreen() {
                 style={[styles.permissionButton, styles.primaryButton]}
                 onPress={connectMicrosoftAccount}
               >
-                <Text style={styles.primaryButtonText}>Connect</Text>
+                <Text style={styles.primaryButtonText}>Allow</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.permissionButton, styles.secondaryButton]}
-                onPress={() => setShowMicrosoftModal(false)}
+                onPress={async () => {
+                  setShowMicrosoftModal(false);
+                  await setMicrosoftModalShown(true); // Mark as shown so it won't appear again
+                }}
               >
-                <Text style={styles.secondaryButtonText}>Not now</Text>
+                <Text style={styles.secondaryButtonText}>Don't allow</Text>
               </TouchableOpacity>
             </View>
           </View>

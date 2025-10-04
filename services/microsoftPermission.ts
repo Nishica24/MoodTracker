@@ -116,6 +116,25 @@ export const getMicrosoftConnectionStatus = async (): Promise<boolean> => {
   }
 };
 
+// Microsoft modal shown status management
+export const setMicrosoftModalShown = async (shown: boolean): Promise<void> => {
+  try {
+    await AsyncStorage.setItem('microsoft_modal_shown', shown.toString());
+  } catch (error) {
+    console.error('Failed to save Microsoft modal shown status:', error);
+  }
+};
+
+export const getMicrosoftModalShown = async (): Promise<boolean> => {
+  try {
+    const shown = await AsyncStorage.getItem('microsoft_modal_shown');
+    return shown === 'true';
+  } catch (error) {
+    console.error('Failed to get Microsoft modal shown status:', error);
+    return false;
+  }
+};
+
 export const fetchDashboardScores = async () => {
   const deviceId = await getOrCreateDeviceId();
   const base = 'http://localhost:5000';
