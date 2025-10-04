@@ -2,19 +2,27 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, StatusBar, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Heart, Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
+import { Heart, Mail, Lock, User, Eye, EyeOff } from 'lucide-react-native';
 import { authService } from '../../services/authService';
 
-export default function LoginScreen() {
+export default function RegistrationScreen() {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const insets = useSafeAreaInsets();
 
   const validateForm = () => {
     const newErrors: {[key: string]: string} = {};
+
+    // Name validation
+    if (!name.trim()) {
+      newErrors.name = 'Name is required';
+    }
 
     // Email validation
     if (!email.trim()) {
@@ -26,13 +34,25 @@ export default function LoginScreen() {
     // Password validation
     if (!password) {
       newErrors.password = 'Password is required';
+    } else {
+      const passwordValidation = authService.validatePassword(password);
+      if (!passwordValidation.is_valid) {
+        newErrors.password = passwordValidation.errors[0];
+      }
+    }
+
+    // Confirm password validation
+    if (!confirmPassword) {
+      newErrors.confirmPassword = 'Please confirm your password';
+    } else if (password !== confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleLogin = async () => {
+  const handleRegistration = async () => {
     if (!validateForm()) {
       return;
     }
@@ -41,10 +61,10 @@ export default function LoginScreen() {
     setErrors({});
 
     try {
-      await authService.login(email, password);
+      await authService.register(name, email, password, confirmPassword);
       Alert.alert(
-        'Welcome Back!',
-        'You have successfully logged in.',
+        'Success!',
+        'Account created successfully. Welcome to MoodTracker!',
         [
           {
             text: 'Continue',
@@ -53,8 +73,8 @@ export default function LoginScreen() {
         ]
       );
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Login failed. Please try again.';
-      Alert.alert('Login Failed', errorMessage);
+      const errorMessage = error instanceof Error ? error.message : 'Registration failed. Please try again.';
+      Alert.alert('Registration Failed', errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -67,10 +87,30 @@ export default function LoginScreen() {
         <View style={styles.header}>
           <Heart size={48} color="#6366F1" />
           <Text style={styles.title}>MoodTracker</Text>
-          <Text style={styles.subtitle}>Your personal wellness companion</Text>
+          <Text style={styles.subtitle}>Create your account</Text>
         </View>
 
         <View style={styles.form}>
+          <View style={styles.inputGroup}>
+            <View style={[styles.inputContainer, errors.name && styles.inputError]}>
+              <User size={20} color="#6B7280" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your full name"
+                placeholderTextColor="#9CA3AF"
+                value={name}
+                onChangeText={(text) => {
+                  setName(text);
+                  if (errors.name) {
+                    setErrors(prev => ({ ...prev, name: '' }));
+                  }
+                }}
+                autoCapitalize="words"
+              />
+            </View>
+            {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
+          </View>
+
           <View style={styles.inputGroup}>
             <View style={[styles.inputContainer, errors.email && styles.inputError]}>
               <Mail size={20} color="#6B7280" style={styles.inputIcon} />
@@ -97,7 +137,7 @@ export default function LoginScreen() {
               <Lock size={20} color="#6B7280" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Enter your password"
+                placeholder="Create a password"
                 placeholderTextColor="#9CA3AF"
                 value={password}
                 onChangeText={(text) => {
@@ -122,24 +162,54 @@ export default function LoginScreen() {
             {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
           </View>
 
+          <View style={styles.inputGroup}>
+            <View style={[styles.inputContainer, errors.confirmPassword && styles.inputError]}>
+              <Lock size={20} color="#6B7280" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Confirm your password"
+                placeholderTextColor="#9CA3AF"
+                value={confirmPassword}
+                onChangeText={(text) => {
+                  setConfirmPassword(text);
+                  if (errors.confirmPassword) {
+                    setErrors(prev => ({ ...prev, confirmPassword: '' }));
+                  }
+                }}
+                secureTextEntry={!showConfirmPassword}
+              />
+              <TouchableOpacity
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                style={styles.eyeIcon}
+              >
+                {showConfirmPassword ? (
+                  <EyeOff size={20} color="#6B7280" />
+                ) : (
+                  <Eye size={20} color="#6B7280" />
+                )}
+              </TouchableOpacity>
+            </View>
+            {errors.confirmPassword && <Text style={styles.errorText}>{errors.confirmPassword}</Text>}
+          </View>
+
           <TouchableOpacity 
-            style={[styles.loginButton, isLoading && styles.buttonDisabled]} 
-            onPress={handleLogin}
+            style={[styles.registerButton, isLoading && styles.buttonDisabled]} 
+            onPress={handleRegistration}
             disabled={isLoading}
           >
             {isLoading ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text style={styles.loginButtonText}>Sign In</Text>
+              <Text style={styles.registerButtonText}>Create Account</Text>
             )}
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={styles.signupButton}
-            onPress={() => router.push('/(auth)/registration')}
+            style={styles.loginButton}
+            onPress={() => router.back()}
             disabled={isLoading}
           >
-            <Text style={styles.signupButtonText}>Create Account</Text>
+            <Text style={styles.loginButtonText}>Already have an account? Sign In</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -208,7 +278,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginLeft: 4,
   },
-  loginButton: {
+  registerButton: {
     backgroundColor: '#6366F1',
     borderRadius: 12,
     paddingVertical: 16,
@@ -218,19 +288,19 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     backgroundColor: '#9CA3AF',
   },
-  loginButtonText: {
+  registerButtonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
   },
-  signupButton: {
+  loginButton: {
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#6366F1',
   },
-  signupButtonText: {
+  loginButtonText: {
     color: '#6366F1',
     fontSize: 16,
     fontWeight: '600',

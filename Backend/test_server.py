@@ -7,6 +7,7 @@ from collections import defaultdict
 from datetime import timedelta
 from typing import Dict
 from Services.groqClient import generate_mood_report
+from Services.auth_service import AuthService
 import requests
 import secrets
 from dotenv import load_dotenv
@@ -35,6 +36,9 @@ mongo = PyMongo(app)
 
 # Get database
 db = mongo.db
+
+# ---------------- Authentication Service ----------------
+auth_service = AuthService()
 
 # ---------------- In-memory store for Microsoft login state ----------------
 ms_tokens: Dict[str, dict] = {}
@@ -270,6 +274,162 @@ def connection_status():
             return jsonify({"connected": False})
     
     return jsonify({"connected": True})
+
+# ---------------- User Authentication Endpoints ----------------
+
+@app.route('/api/register', methods=['POST'])
+def register_user():
+    """Register a new user with email and password"""
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        name = data.get('name', '').strip()
+        email = data.get('email', '').strip()
+        password = data.get('password', '')
+        confirm_password = data.get('confirmPassword', '')
+        
+        # Validate required fields
+        if not name or not email or not password:
+            return jsonify({"error": "Name, email, and password are required"}), 400
+        
+        # Validate email format
+        if not auth_service.validate_email(email):
+            return jsonify({"error": "Invalid email format"}), 400
+        
+        # Validate password strength
+        password_validation = auth_service.validate_password(password)
+        if not password_validation['is_valid']:
+            return jsonify({
+                "error": "Password does not meet requirements",
+                "details": password_validation['errors']
+            }), 400
+        
+        # Check if passwords match
+        if password != confirm_password:
+            return jsonify({"error": "Passwords do not match"}), 400
+        
+        # Check if user already exists
+        existing_user = db.users.find_one({"email": email.lower()})
+        if existing_user:
+            return jsonify({"error": "User with this email already exists"}), 409
+        
+        # Create user data
+        user_data = auth_service.create_user_data(name, email, password)
+        
+        # Insert user into database
+        result = db.users.insert_one(user_data)
+        user_id = str(result.inserted_id)
+        
+        # Generate JWT token
+        token = auth_service.generate_token(user_id, email)
+        
+        logger.info(f"User registered successfully: {email}")
+        
+        return jsonify({
+            "message": "User registered successfully",
+            "user": {
+                "id": user_id,
+                "name": name,
+                "email": email
+            },
+            "token": token
+        }), 201
+        
+    except Exception as e:
+        logger.error(f"Registration error: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
+@app.route('/api/login', methods=['POST'])
+def login_user():
+    """Login user with email and password"""
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        email = data.get('email', '').strip()
+        password = data.get('password', '')
+        
+        # Validate required fields
+        if not email or not password:
+            return jsonify({"error": "Email and password are required"}), 400
+        
+        # Validate email format
+        if not auth_service.validate_email(email):
+            return jsonify({"error": "Invalid email format"}), 400
+        
+        # Find user in database
+        user = db.users.find_one({"email": email.lower()})
+        if not user:
+            return jsonify({"error": "Invalid email or password"}), 401
+        
+        # Verify password
+        if not auth_service.verify_password(password, user['password_hash']):
+            return jsonify({"error": "Invalid email or password"}), 401
+        
+        # Check if user is active
+        if not user.get('is_active', True):
+            return jsonify({"error": "Account is deactivated"}), 401
+        
+        # Update last login
+        db.users.update_one(
+            {"_id": user['_id']},
+            {"$set": {"last_login": datetime.now(timezone.utc)}}
+        )
+        
+        # Generate JWT token
+        user_id = str(user['_id'])
+        token = auth_service.generate_token(user_id, email)
+        
+        logger.info(f"User logged in successfully: {email}")
+        
+        return jsonify({
+            "message": "Login successful",
+            "user": {
+                "id": user_id,
+                "name": user['name'],
+                "email": user['email']
+            },
+            "token": token
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Login error: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
+@app.route('/api/verify-token', methods=['POST'])
+def verify_token():
+    """Verify JWT token and return user info"""
+    try:
+        data = request.json
+        if not data or 'token' not in data:
+            return jsonify({"error": "Token is required"}), 400
+        
+        token = data['token']
+        payload = auth_service.verify_token(token)
+        
+        if not payload:
+            return jsonify({"error": "Invalid or expired token"}), 401
+        
+        # Get user from database
+        user = db.users.find_one({"_id": payload['user_id']})
+        if not user or not user.get('is_active', True):
+            return jsonify({"error": "User not found or inactive"}), 401
+        
+        return jsonify({
+            "valid": True,
+            "user": {
+                "id": str(user['_id']),
+                "name": user['name'],
+                "email": user['email']
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Token verification error: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.route('/debug-devices', methods=['GET'])
 def debug_devices():

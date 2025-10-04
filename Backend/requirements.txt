@@ -9,6 +9,9 @@ tokenizers>=0.13.0
 requests>=2.25.0
 msal>=1.28.0
 python-dotenv>=1.0.0
+bcrypt>=4.0.1
+PyJWT>=2.8.0
+flask-pymongo>=2.3.0
 
 # Run the test_server.py for the backend
 # It is the main bakend file.
