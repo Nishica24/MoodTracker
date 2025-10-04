@@ -7,13 +7,6 @@ import { ArrowLeft, Zap, TrendingDown, TrendingUp, Calendar, Brain } from 'lucid
 import { router } from 'expo-router';
 
 export default function WorkStressScreen() {
-  const [selectedPeriod, setSelectedPeriod] = useState('week');
-
-  const periods = [
-    { key: 'week', label: 'Week' },
-    { key: 'month', label: 'Month' },
-    { key: 'quarter', label: '3 Months' },
-  ];
 
   const workStressTrends: Array<{
     title: string;
@@ -99,29 +92,13 @@ export default function WorkStressScreen() {
         </View>
 
         <View style={styles.content}>
-          {/* Period Selector */}
-          <View style={styles.periodSelector}>
-            {periods.map((period) => (
-              <TouchableOpacity
-                key={period.key}
-                style={[
-                  styles.periodButton,
-                  selectedPeriod === period.key && styles.periodButtonSelected
-                ]}
-                onPress={() => setSelectedPeriod(period.key)}
-              >
-                <Text style={[
-                  styles.periodButtonText,
-                  selectedPeriod === period.key && styles.periodButtonTextSelected
-                ]}>
-                  {period.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          {/* Weekly Chart Section */}
+          <View style={styles.chartSection}>
+            <Text style={styles.chartSectionTitle}>Weekly Graph</Text>
           </View>
-
+          
           {/* Work Stress Chart */}
-          <WorkStressChart period={selectedPeriod} />
+          <WorkStressChart period="week" />
 
           {/* Key Trends */}
           <View style={styles.section}>
@@ -201,33 +178,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     gap: 24,
   },
-  periodSelector: {
-    flexDirection: 'row',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    padding: 4,
-  },
-  periodButton: {
-    flex: 1,
-    paddingVertical: 8,
+  chartSection: {
+    marginBottom: -8,
     alignItems: 'center',
-    borderRadius: 8,
   },
-  periodButtonSelected: {
-    backgroundColor: 'white',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  periodButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6B7280',
-  },
-  periodButtonTextSelected: {
+  chartSectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
     color: '#1F2937',
+    textAlign: 'center',
   },
   section: {
     gap: 16,

@@ -1052,6 +1052,96 @@ def generate_screentime_report():
         print(f"Failed to generate screen time report: {error}")
         return jsonify({"error": "Failed to generate screen time report", "details": str(error)}), 500
 
+@app.route('/generate-workstress-report', methods=['POST'])
+def generate_workstress_report():
+    print('Received request to generate work stress report...')
+    workstress_data = request.json
+
+    if not workstress_data:
+        return jsonify({"error": "Request body must contain work stress data."}), 400
+
+    try:
+        # Extract work stress data
+        daily_stress_scores = workstress_data.get('daily_stress_scores', [])
+        average_stress_score = workstress_data.get('average_stress_score', 0)
+        stress_trend = workstress_data.get('stress_trend', 'stable')
+        high_stress_days = workstress_data.get('high_stress_days', 0)
+        low_stress_days = workstress_data.get('low_stress_days', 0)
+        
+        # Generate insights based on work stress data
+        insights = []
+        
+        # Average stress level insights
+        if average_stress_score < 4:
+            insights.append("Excellent! Your work stress levels are very manageable.")
+        elif average_stress_score < 6:
+            insights.append("Your work stress is moderate. You're handling work pressure well.")
+        elif average_stress_score < 8:
+            insights.append("Your work stress is elevated. Consider implementing stress management techniques.")
+        else:
+            insights.append("Your work stress levels are quite high. It's important to prioritize your mental health.")
+        
+        # Trend insights
+        if stress_trend == 'increasing':
+            insights.append("Your stress levels have been rising recently. This is a good time to implement stress reduction strategies.")
+        elif stress_trend == 'decreasing':
+            insights.append("Great news! Your stress levels have been decreasing, showing effective stress management.")
+        else:
+            insights.append("Your stress levels have remained relatively stable, which indicates consistent work-life balance.")
+        
+        # High/low stress day insights
+        total_days = len(daily_stress_scores)
+        if total_days > 0:
+            high_stress_percentage = (high_stress_days / total_days) * 100
+            low_stress_percentage = (low_stress_days / total_days) * 100
+            
+            if high_stress_percentage > 50:
+                insights.append(f"You had {high_stress_days} high-stress days ({high_stress_percentage:.0f}% of the period). Consider identifying stress triggers.")
+            elif low_stress_percentage > 50:
+                insights.append(f"Excellent! You had {low_stress_days} low-stress days ({low_stress_percentage:.0f}% of the period). Keep up the great work!")
+        
+        # Generate suggestions based on stress patterns
+        suggestions = [
+            "Take regular breaks every 2 hours to prevent stress buildup",
+            "Practice deep breathing exercises during high-stress moments",
+            "Set clear boundaries between work and personal time",
+            "Prioritize tasks and focus on one thing at a time",
+            "Communicate with your manager about workload if it's consistently overwhelming"
+        ]
+        
+        # Add specific suggestions based on stress levels
+        if average_stress_score > 7:
+            suggestions.extend([
+                "Consider talking to HR or a mental health professional about workplace stress",
+                "Implement a daily stress journal to identify patterns and triggers",
+                "Try meditation or mindfulness apps for 10-15 minutes daily"
+            ])
+        elif average_stress_score < 4:
+            suggestions.extend([
+                "Maintain your current healthy work habits",
+                "Consider mentoring colleagues who might be struggling with stress",
+                "Use your low stress levels to focus on professional development"
+            ])
+        
+        # Add trend-specific suggestions
+        if stress_trend == 'increasing':
+            suggestions.extend([
+                "Schedule a meeting with your manager to discuss workload distribution",
+                "Consider delegating some tasks if possible",
+                "Implement a 'no work after 6 PM' rule to create boundaries"
+            ])
+        elif stress_trend == 'decreasing':
+            suggestions.append("Continue the strategies that have been helping reduce your stress levels")
+        
+        return jsonify({
+            'weekly_insights': insights,
+            'improvement_suggestions': suggestions
+        }), 200
+        
+    except Exception as error:
+        print(f"Failed to generate work stress report: {error}")
+        return jsonify({"error": "Failed to generate work stress report", "details": str(error)}), 500
+
         # ---------------- Dashboard Work Stress Scores ---------------- 
 
 @app.route('/dashboard/scores', methods=['GET'])

@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Zap, TrendingDown, TrendingUp } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { Zap, TrendingDown, TrendingUp, FileText } from 'lucide-react-native';
 import { fetchWorkStress } from '@/services/microsoftPermission';
+import { generateWorkStressReport, createMockWorkStressData } from '@/services/reportService';
+import { generateAndShowReport } from '@/utils/reportUtils';
 
 interface WorkStressChartProps {
   period: string;
@@ -12,6 +14,7 @@ export function WorkStressChart({ period }: WorkStressChartProps) {
   const [days, setDays] = useState<string[]>([]);
   const [average, setAverage] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   const maxValue = 10; // Stress scale is 1-10
   const chartHeight = 120;
@@ -48,6 +51,56 @@ export function WorkStressChart({ period }: WorkStressChartProps) {
     return () => { cancelled = true; };
   }, [period]);
 
+  const handleGenerateReport = async () => {
+    setGeneratingReport(true);
+    try {
+      await generateAndShowReport(
+        async () => {
+          // Create work stress data from current stress scores
+          const workStressData = createMockWorkStressData(stressData);
+          
+          // Generate the report
+          const report = await generateWorkStressReport(workStressData);
+          
+          // Check if report has an error
+          if ((report as any).error) {
+            throw new Error(`Server error: ${(report as any).error}`);
+          }
+          
+          return report;
+        },
+        {
+          title: '⚡ Work Stress Report',
+          subtitle: 'Analyze your work stress patterns',
+          averageScore: average,
+          period: period,
+        }
+      );
+    } catch (error) {
+      console.error('Error generating report:', error);
+      alert('Failed to generate report. Please try again.');
+    } finally {
+      setGeneratingReport(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.titleContainer}>
+            <Zap size={20} color="#F59E0B" />
+            <Text style={styles.title}>Work Stress Levels</Text>
+          </View>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#F59E0B" />
+          <Text style={styles.loadingText}>Loading your work stress data...</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -60,8 +113,9 @@ export function WorkStressChart({ period }: WorkStressChartProps) {
 
       <View style={styles.chartContainer}>
         <View style={styles.chart}>
-          {stressData.map((value, index) => (
+          {stressData.length > 0 ? stressData.map((value, index) => (
             <View key={index} style={styles.barContainer}>
+              <Text style={styles.scoreLabel}>{value.toFixed(1)}</Text>
               <View
                 style={[
                   styles.bar,
@@ -73,7 +127,11 @@ export function WorkStressChart({ period }: WorkStressChartProps) {
               />
               <Text style={styles.dayLabel}>{days[index]}</Text>
             </View>
-          ))}
+          )) : (
+            <View style={styles.noDataContainer}>
+              <Text style={styles.noDataText}>No data available for this period</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.legend}>
@@ -90,6 +148,17 @@ export function WorkStressChart({ period }: WorkStressChartProps) {
             <Text style={styles.legendText}>High (&gt;7/10)</Text>
           </View>
         </View>
+
+        <TouchableOpacity 
+          style={styles.generateReportButton} 
+          onPress={handleGenerateReport}
+          disabled={generatingReport}
+        >
+          <FileText size={16} color="white" />
+          <Text style={styles.generateReportButtonText}>
+            {generatingReport ? 'Generating...' : 'Generate Report'}
+          </Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -124,13 +193,14 @@ const styles = StyleSheet.create({
   },
   chartContainer: {
     gap: 16,
+    paddingHorizontal: 0,
   },
   chart: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    height: 140,
-    paddingHorizontal: 8,
+    height: 180,
+    paddingHorizontal: 0,
   },
   barContainer: {
     flex: 1,
@@ -142,20 +212,39 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     minHeight: 20,
   },
+  scoreLabel: {
+    fontSize: 11,
+    color: '#1F2937',
+    fontWeight: '600',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
   dayLabel: {
     fontSize: 12,
     color: '#6B7280',
     fontWeight: '500',
   },
+  noDataContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  noDataText: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
   legend: {
     flexDirection: 'row',
     justifyContent: 'center',
+    paddingHorizontal: 0,
     gap: 20,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
+    flexShrink: 0,
   },
   legendDot: {
     width: 8,
@@ -163,7 +252,34 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   legendText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6B7280',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  generateReportButton: {
+    backgroundColor: '#EF4444',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginTop: 16,
+    gap: 8,
+  },
+  generateReportButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

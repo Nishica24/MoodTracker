@@ -229,3 +229,97 @@ export function formatScreenTimeData(
     app_usage_breakdown,
   };
 }
+
+// ========================================================================
+// SECTION 6: WORK STRESS REPORT GENERATION
+// ========================================================================
+
+/**
+ * @description Represents the data for work stress report generation.
+ */
+interface WorkStressData {
+  daily_stress_scores: Array<{
+    date: string;
+    stress_score: number;
+  }>;
+  average_stress_score: number;
+  stress_trend: string; // 'increasing', 'decreasing', 'stable'
+  high_stress_days: number;
+  low_stress_days: number;
+}
+
+/**
+ * @description Sends work stress data to the backend to generate a report.
+ * @param workStressData The structured work stress data.
+ * @returns A promise that resolves to the generated report data.
+ */
+export async function generateWorkStressReport(workStressData: WorkStressData): Promise<ReportData> {
+  try {
+    const response = await fetch(`${BACKEND_URL}/generate-workstress-report`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(workStressData),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const reportData = await response.json();
+    return reportData;
+  } catch (error) {
+    console.error('Error generating work stress report:', error);
+    throw new Error('Failed to generate work stress report. Please try again.');
+  }
+}
+
+/**
+ * @description Creates mock work stress data from stress scores for report generation.
+ * @param stressScores Array of daily stress scores (1-10 scale).
+ * @returns A structured WorkStressData object.
+ */
+export function createMockWorkStressData(stressScores: number[]): WorkStressData {
+  const averageStressScore = stressScores.length > 0 
+    ? stressScores.reduce((sum, score) => sum + score, 0) / stressScores.length 
+    : 5.0;
+
+  // Create daily stress data
+  const dailyStressScores = stressScores.map((score, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (stressScores.length - 1 - index));
+    
+    return {
+      date: date.toISOString().split('T')[0],
+      stress_score: score,
+    };
+  });
+
+  // Calculate trend
+  let stressTrend = 'stable';
+  if (stressScores.length >= 2) {
+    const firstHalf = stressScores.slice(0, Math.floor(stressScores.length / 2));
+    const secondHalf = stressScores.slice(Math.floor(stressScores.length / 2));
+    const firstHalfAvg = firstHalf.reduce((sum, score) => sum + score, 0) / firstHalf.length;
+    const secondHalfAvg = secondHalf.reduce((sum, score) => sum + score, 0) / secondHalf.length;
+    
+    if (secondHalfAvg > firstHalfAvg + 0.5) {
+      stressTrend = 'increasing';
+    } else if (secondHalfAvg < firstHalfAvg - 0.5) {
+      stressTrend = 'decreasing';
+    }
+  }
+
+  // Count high and low stress days
+  const highStressDays = stressScores.filter(score => score > 7).length;
+  const lowStressDays = stressScores.filter(score => score < 4).length;
+
+  return {
+    daily_stress_scores: dailyStressScores,
+    average_stress_score: parseFloat(averageStressScore.toFixed(1)),
+    stress_trend: stressTrend,
+    high_stress_days: highStressDays,
+    low_stress_days: lowStressDays,
+  };
+}
