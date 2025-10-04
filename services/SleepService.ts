@@ -13,7 +13,7 @@ export interface SleepSegment {
   status: number;
 }
 
-const sleepEventEmitter = new NativeEventEmitter(SleepModule);
+const sleepEventEmitter = SleepModule ? new NativeEventEmitter(SleepModule) : null;
 
 const requestPermission = async (): Promise<boolean> => {
   if (Platform.OS !== 'android' || Platform.Version < 29) {
@@ -66,7 +66,7 @@ const stopTracking = (): Promise<string> => {
 };
 
 const addSleepListener = (callback: (event: SleepSegment[]) => void) => {
-  if (!isSleepModuleAvailable()) {
+  if (!isSleepModuleAvailable() || !sleepEventEmitter) {
     console.warn('Sleep tracking module is not available. Sleep listener will not work.');
     return {
       remove: () => {}
