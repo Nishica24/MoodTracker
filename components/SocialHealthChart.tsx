@@ -129,6 +129,7 @@ export function SocialHealthChart({ period }: SocialHealthChartProps) {
         <View style={styles.chart}>
           {socialData.length > 0 ? socialData.map((value, index) => (
             <View key={index} style={styles.barContainer}>
+              <Text style={styles.scoreLabel}>{value.toFixed(1)}</Text>
               <View
                 style={[
                   styles.bar,
@@ -207,13 +208,14 @@ const styles = StyleSheet.create({
   },
   chartContainer: {
     gap: 16,
+    paddingHorizontal: 0,
   },
   chart: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    height: 140,
-    paddingHorizontal: 8,
+    height: 180,
+    paddingHorizontal: 0,
   },
   barContainer: {
     flex: 1,
@@ -225,6 +227,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     minHeight: 20,
   },
+  scoreLabel: {
+    fontSize: 11,
+    color: '#1F2937',
+    fontWeight: '600',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
   dayLabel: {
     fontSize: 12,
     color: '#6B7280',
@@ -232,13 +241,15 @@ const styles = StyleSheet.create({
   },
   legend: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 20,
+    justifyContent: 'flex-start',
+    paddingHorizontal: 0,
+    gap: 8,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
+    flexShrink: 0,
   },
   legendDot: {
     width: 8,
@@ -246,7 +257,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   legendText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6B7280',
   },
   loadingContainer: {

@@ -7,7 +7,6 @@ import { router } from 'expo-router';
 import { getHistoricalSocialScores } from '@/scoreFunctions/socialScore';
 
 export default function SocialHealthScreen() {
-  const [selectedPeriod, setSelectedPeriod] = useState('week');
   const [socialTrends, setSocialTrends] = useState<Array<{
     title: string;
     value: string;
@@ -15,12 +14,6 @@ export default function SocialHealthScreen() {
     description: string;
   }>>([]);
   const [isLoadingTrends, setIsLoadingTrends] = useState(true);
-
-  const periods = [
-    { key: 'week', label: 'Week' },
-    { key: 'month', label: 'Month' },
-    { key: 'quarter', label: '3 Months' },
-  ];
 
   // Function to analyze social data and generate dynamic trends
   const analyzeSocialTrends = (socialData: number[]) => {
@@ -103,12 +96,12 @@ export default function SocialHealthScreen() {
     return trends;
   };
 
-  // Load and analyze social data when period changes
+  // Load and analyze social data
   useEffect(() => {
     const loadSocialData = async () => {
       setIsLoadingTrends(true);
       try {
-        const historicalScores = await getHistoricalSocialScores(selectedPeriod);
+        const historicalScores = await getHistoricalSocialScores('week');
         
         if (historicalScores.length === 0) {
           // Fallback to static data if no historical data
@@ -132,7 +125,7 @@ export default function SocialHealthScreen() {
     };
 
     loadSocialData();
-  }, [selectedPeriod]);
+  }, []);
 
 
   return (
@@ -153,29 +146,13 @@ export default function SocialHealthScreen() {
         </View>
 
         <View style={styles.content}>
-          {/* Period Selector */}
-          <View style={styles.periodSelector}>
-            {periods.map((period) => (
-              <TouchableOpacity
-                key={period.key}
-                style={[
-                  styles.periodButton,
-                  selectedPeriod === period.key && styles.periodButtonSelected
-                ]}
-                onPress={() => setSelectedPeriod(period.key)}
-              >
-                <Text style={[
-                  styles.periodButtonText,
-                  selectedPeriod === period.key && styles.periodButtonTextSelected
-                ]}>
-                  {period.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          {/* Weekly Chart Section */}
+          <View style={styles.chartSection}>
+            <Text style={styles.chartSectionTitle}>Weekly Graph</Text>
           </View>
-
+          
           {/* Social Health Chart */}
-          <SocialHealthChart period={selectedPeriod} />
+          <SocialHealthChart period="week" />
 
           {/* Key Trends */}
           <View style={styles.section}>
@@ -245,33 +222,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     gap: 24,
   },
-  periodSelector: {
-    flexDirection: 'row',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    padding: 4,
-  },
-  periodButton: {
-    flex: 1,
-    paddingVertical: 8,
+  chartSection: {
+    marginBottom: -8,
     alignItems: 'center',
-    borderRadius: 8,
   },
-  periodButtonSelected: {
-    backgroundColor: 'white',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  periodButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6B7280',
-  },
-  periodButtonTextSelected: {
+  chartSectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
     color: '#1F2937',
+    textAlign: 'center',
   },
   section: {
     gap: 16,
