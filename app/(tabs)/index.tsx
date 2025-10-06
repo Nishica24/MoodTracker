@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, Alert, Modal, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatsCard } from '@/components/StatsCard';
@@ -23,12 +23,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  * Returns a greeting based on the current hour of the day.
  */
 
-const getGreeting = (): string => {
+const getGreeting = (userName?: string): string => {
   const currentHour = new Date().getHours();
+  const name = userName ? `, ${userName}` : '';
 
- if (currentHour < 12) return 'Good morning!';
-   if (currentHour < 18) return 'Good afternoon!';
-   return 'Good evening!';
+  if (currentHour < 12) return `Good morning${name}!`;
+  if (currentHour < 18) return `Good afternoon${name}!`;
+  return `Good evening${name}!`;
 };
 
 /**
@@ -100,6 +101,8 @@ export default function DashboardScreen() {
   const [userProfile, setUserProfile] = useState<UserProfile>(DEFAULT_USER_PROFILE);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [showRefreshOverlay, setShowRefreshOverlay] = useState<boolean>(false);
+  const lastCalculatedScore = useRef<string>('');
+  const isRefreshingRef = useRef<boolean>(false);
 
   // Load user profile from AsyncStorage
   const loadUserProfile = async () => {
@@ -475,13 +478,24 @@ export default function DashboardScreen() {
     const combined = computeWeightedAverage(parts);
     if (combined !== null) {
       setOverallScore(combined);
-      console.log(
-        `Overall Score → ${combined.toFixed(1)} (Mood: ${mood}${typeof social === 'number' ? `, Social: ${social}` : ''}${typeof workWellbeing === 'number' ? `, WorkWellbeing: ${workWellbeing}` : ''}${typeof screenWellbeing === 'number' ? `, ScreenWellbeing: ${screenWellbeing}` : ''}) [Weights: ${JSON.stringify(weights)}]`
-      );
+      
+      // Create a unique key for this calculation to prevent duplicate logging
+      const scoreKey = `${mood}-${social}-${workWellbeing}-${screenWellbeing}-${userProfile.age}-${userProfile.role}`;
+      
+      // Only log if:
+      // 1. The score actually changed AND
+      // 2. We're not currently refreshing (to avoid multiple logs during refresh)
+      if (lastCalculatedScore.current !== scoreKey && !isRefreshingRef.current) {
+        console.log(
+          `Overall Score → ${combined.toFixed(1)} (Mood: ${mood}${typeof social === 'number' ? `, Social: ${social}` : ''}${typeof workWellbeing === 'number' ? `, WorkWellbeing: ${workWellbeing}` : ''}${typeof screenWellbeing === 'number' ? `, ScreenWellbeing: ${screenWellbeing}` : ''}) [Weights: ${JSON.stringify(weights)}]`
+        );
+        lastCalculatedScore.current = scoreKey;
+      }
     } else {
       setOverallScore(mood);
     }
-  }, [data, socialScore, dashboardScores, contextualScreenTimeScore, screenTimeHoursToday, userProfile]);
+  }, [data, socialScore, dashboardScores, contextualScreenTimeScore, screenTimeHoursToday, userProfile.age, userProfile.role]);
+
 
   // --- AUTOMATIC SLEEP TRACKING ---
   useEffect(() => {
@@ -498,6 +512,7 @@ export default function DashboardScreen() {
     
     try {
       setIsRefreshing(true);
+      isRefreshingRef.current = true; // Set ref flag
       setShowRefreshOverlay(true); // Show full page loading overlay
       console.log('Refreshing all dashboard scores...');
       
@@ -582,10 +597,29 @@ export default function DashboardScreen() {
       }
 
       console.log('All scores refreshed successfully!');
+      
+      // Log the final score after a brief delay to ensure all state updates are complete
+      setTimeout(() => {
+        if (overallScore !== null) {
+          const mood = data?.mood_level as number;
+          const social = socialScore;
+          const workStressRaw: number | null = dashboardScores?.work_stress?.score ?? null;
+          const workWellbeing: number | null = typeof workStressRaw === 'number' ? Math.max(0, Math.min(10, 10 - workStressRaw)) : null;
+          const screenWellbeing = contextualScreenTimeScore !== null ? contextualScreenTimeScore : 
+            (screenTimeHoursToday !== null ? 10 - (Math.max(0, Math.min(9, screenTimeHoursToday)) * (8 / 9)) : null);
+          const weights = getUserSpecificWeights(userProfile.age, userProfile.role);
+          
+          console.log(
+            `Overall Score → ${overallScore.toFixed(1)} (Mood: ${mood}${typeof social === 'number' ? `, Social: ${social}` : ''}${typeof workWellbeing === 'number' ? `, WorkWellbeing: ${workWellbeing}` : ''}${typeof screenWellbeing === 'number' ? `, ScreenWellbeing: ${screenWellbeing}` : ''}) [Weights: ${JSON.stringify(weights)}]`
+          );
+        }
+      }, 100);
+      
     } catch (error) {
       console.error('Error refreshing all scores:', error);
     } finally {
       setIsRefreshing(false);
+      isRefreshingRef.current = false; // Clear ref flag
       // Add a small delay before hiding overlay for better UX
       setTimeout(() => {
         setShowRefreshOverlay(false);
@@ -722,7 +756,7 @@ export default function DashboardScreen() {
         <View style={[styles.header, { paddingTop: insets.top + 40 }]}>
           <View style={styles.headerTop}>
             <View>
-              <Text style={styles.greeting}>{getGreeting()}</Text>
+              <Text style={styles.greeting}>{getGreeting(userProfile.name)}</Text>
               <Text style={styles.subtitle}>How are you feeling today?</Text>
             </View>
             <View style={styles.headerActions}>

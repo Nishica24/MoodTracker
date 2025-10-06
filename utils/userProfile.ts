@@ -4,6 +4,7 @@
  */
 
 export interface UserProfile {
+  name: string;
   age: number;
   role: 'student' | 'working_adult' | 'professional';
   jobTitle?: string;
@@ -23,6 +24,7 @@ export interface UserProfile {
  * Default user profile
  */
 export const DEFAULT_USER_PROFILE: UserProfile = {
+  name: 'User',
   age: 25,
   role: 'working_adult',
   workHours: {
