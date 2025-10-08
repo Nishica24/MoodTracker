@@ -6,6 +6,7 @@ import { QuickActions } from '@/components/QuickActions';
 import { Heart, Zap, Moon, Smartphone, DollarSign, LucideIcon, Plus, TrendingUp, RefreshCw, Link } from 'lucide-react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { useAuth } from '@/hooks/useAuth';
 // --- CORRECTED --- Use relative paths for stability
 import { updateDailyHistory } from '../../services/callLogsServices';
 import { calculateSocialScore, getHistoricalSocialScores } from '../../scoreFunctions/socialScore';
@@ -70,6 +71,12 @@ export default function DashboardScreen() {
   const { result } = useLocalSearchParams();
   const data = result ? JSON.parse(result as string) : null;
   const insets = useSafeAreaInsets();
+  const { user, updateUserScore } = useAuth();
+  
+  console.log('🔍 DEBUG: Dashboard component render');
+  console.log(`🔍 DEBUG: Result from params:`, result);
+  console.log(`🔍 DEBUG: Parsed data:`, data);
+  console.log(`🔍 DEBUG: Current user:`, user);
   
   const [moodScores, setMoodScores] = useState<any[]>([]);
   const [socialScore, setSocialScore] = useState<number | null>(null);
@@ -181,23 +188,80 @@ export default function DashboardScreen() {
     };
   }, []);
 
+  // --- NEW FUNCTION --- Fetch user scores from database
+  const fetchUserScoresFromDB = async () => {
+    if (!user?.id) {
+      console.log('🔍 DEBUG: No user ID available for fetching scores');
+      return null;
+    }
+
+    try {
+      console.log(`🔍 DEBUG: Fetching user scores for user_id=${user.id}`);
+      const response = await fetch(`http://localhost:5000/api/user-scores/${user.id}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        console.error(`❌ DEBUG: Failed to fetch user scores: ${response.status}`);
+        return null;
+      }
+
+      const result = await response.json();
+      console.log(`🔍 DEBUG: User scores from DB:`, result);
+      
+      // Get today's score
+      const today = new Date().toISOString().split('T')[0];
+      const todayScore = result.scores?.find((score: any) => score.date === today);
+      
+      console.log(`🔍 DEBUG: Today's score:`, todayScore);
+      return todayScore;
+    } catch (error) {
+      console.error('❌ DEBUG: Error fetching user scores:', error);
+      return null;
+    }
+  };
+
   // This useEffect handles the initial data loading and call log processing
   useEffect(() => {
 
     const initializeDashboard = async () => {
+        console.log('🔍 DEBUG: Initializing dashboard');
         setIsLoading(true);
 
         // --- Initial logic for mood data ---
-        if (data) {
+        let moodData = data; // From onboarding params
+        
+        // If no data from params (returning user), fetch from database
+        if (!moodData && user?.id) {
+          console.log('🔍 DEBUG: No params data, fetching from database');
+          const dbScore = await fetchUserScoresFromDB();
+          if (dbScore) {
+            moodData = {
+              mood: 'Neutral', // Default mood name
+              mood_level: dbScore.breakdown?.moodLevel || 5,
+              emoji: '😊', // Default emoji
+              timestamp: dbScore.updatedAt
+            };
+            console.log(`🔍 DEBUG: Using DB mood data:`, moodData);
+          }
+        }
+
+        if (moodData) {
+          console.log(`🔍 DEBUG: Setting mood data:`, moodData);
           const mockMoodScores = [{
-              emotion: data.mood?.toLowerCase() || 'neutral',
-              confidence: data.mood_level ? data.mood_level / 10 : 0.5,
-              percentage: data.mood_level ? data.mood_level * 10 : 50
+              emotion: moodData.mood?.toLowerCase() || 'neutral',
+              confidence: moodData.mood_level ? moodData.mood_level / 10 : 0.5,
+              percentage: moodData.mood_level ? moodData.mood_level * 10 : 50
           }];
           setMoodScores(mockMoodScores);
           // --- NEW --- Set the initial overall score based on mood level alone
-          setOverallScore(data.mood_level || 5);
-
+          setOverallScore(moodData.mood_level || 5);
+        } else {
+          console.log('🔍 DEBUG: No mood data available, using defaults');
+          setOverallScore(5);
         }
 
       // --- CALL LOG PERMISSION LOGIC ---
@@ -312,7 +376,7 @@ export default function DashboardScreen() {
     }
 
     initializeDashboard();
-  }, []); // Empty dependency array ensures this runs only once when the component mounts
+  }, [user?.id]); // Add user.id as dependency to re-run when user changes
 
   // --- NEW --- This useEffect reacts to changes in the social score and updates the overall score
   useEffect(() => {
@@ -349,7 +413,7 @@ export default function DashboardScreen() {
     try {
       setIsRefreshing(true);
       setShowRefreshOverlay(true); // Show full page loading overlay
-      console.log('Refreshing all dashboard scores...');
+      console.log('🔍 DEBUG: Refreshing all dashboard scores...');
       
       // Refresh Microsoft scores (only if user is connected)
       if (microsoftConnected) {
@@ -357,15 +421,21 @@ export default function DashboardScreen() {
           const scores = await fetchDashboardScores();
           setDashboardScores(scores);
           setMicrosoftConnected(true);
-          console.log('Microsoft scores refreshed:', scores);
+          console.log('🔍 DEBUG: Microsoft scores refreshed:', scores);
+          
+          // Update user score in database
+          if (user?.id && scores?.work_stress?.score) {
+            console.log(`🔍 DEBUG: Updating work stress score in DB: ${scores.work_stress.score}`);
+            await updateUserScore({
+              workStressScore: scores.work_stress.score
+            });
+          }
         } catch (error) {
-          console.error('Failed to refresh Microsoft scores:', error);
+          console.error('❌ DEBUG: Failed to refresh Microsoft scores:', error);
           setMicrosoftConnected(false);
         }
       } else {
-        console.log('Microsoft not connected, skipping work stress refresh');
-        // When Microsoft is not connected, work stress data remains static
-        // No need to attempt fetching live data as it will fail
+        console.log('🔍 DEBUG: Microsoft not connected, skipping work stress refresh');
       }
 
       // Refresh social score
@@ -375,32 +445,57 @@ export default function DashboardScreen() {
         setSocialScore(socialScore);
         const trend = await calculateSocialTrend();
         setSocialTrend(trend);
-        console.log('Social score refreshed:', socialScore);
+        console.log(`🔍 DEBUG: Social score refreshed: ${socialScore}`);
+        
+        // Update user score in database
+        if (user?.id && socialScore !== null) {
+          console.log(`🔍 DEBUG: Updating social score in DB: ${socialScore}`);
+          await updateUserScore({
+            socialScore: socialScore
+          });
+        }
       } catch (error) {
-        console.error('Failed to refresh social score:', error);
+        console.error('❌ DEBUG: Failed to refresh social score:', error);
       }
 
       // Refresh screen time data
       try {
         await fetchScreenTimeSummary();
-        console.log('Screen time data refreshed');
+        console.log('🔍 DEBUG: Screen time data refreshed');
+        
+        // Update user score in database with screen time penalty
+        if (user?.id && screenTimeHoursToday !== null) {
+          const penalty = Math.max(0, (screenTimeHoursToday - 6) * 0.5); // Penalty for > 6 hours
+          console.log(`🔍 DEBUG: Updating screen time penalty in DB: ${penalty}`);
+          await updateUserScore({
+            screenTimePenalty: penalty
+          });
+        }
       } catch (error) {
-        console.error('Failed to refresh screen time:', error);
+        console.error('❌ DEBUG: Failed to refresh screen time:', error);
       }
 
       // Refresh sleep data (if permission granted)
       if (permissionStatus === 'Granted') {
         try {
           // Sleep data refreshes automatically via listener, but we can trigger a check
-          console.log('Sleep data is being tracked automatically');
+          console.log('🔍 DEBUG: Sleep data is being tracked automatically');
+          
+          // Update user score in database with sleep score
+          if (user?.id && sleepScore !== null) {
+            console.log(`🔍 DEBUG: Updating sleep score in DB: ${sleepScore}`);
+            await updateUserScore({
+              interactionPenalty: 0 // Sleep is positive, no penalty
+            });
+          }
         } catch (error) {
-          console.error('Failed to refresh sleep data:', error);
+          console.error('❌ DEBUG: Failed to refresh sleep data:', error);
         }
       }
 
-      console.log('All scores refreshed successfully!');
+      console.log('🔍 DEBUG: All scores refreshed successfully!');
     } catch (error) {
-      console.error('Error refreshing all scores:', error);
+      console.error('❌ DEBUG: Error refreshing all scores:', error);
     } finally {
       setIsRefreshing(false);
       // Add a small delay before hiding overlay for better UX

@@ -810,43 +810,89 @@ def graph_events():
 
 @app.route("/generate-mood-score", methods=["POST"])
 def generate_mood_score():
+    """Generate baseline mood score during onboarding and store in database"""
     try:
         data = request.json
-        user_id = data.get('user_id', 0)
+        user_id = data.get('user_id', '')
         goals = data.get("goals", [])
         concerns = data.get("concerns", [])
+
+        logger.info(f"🔍 DEBUG: generate-mood-score called with user_id={user_id}")
+        logger.info(f"🔍 DEBUG: goals={goals}, concerns={concerns}")
+
+        if not user_id:
+            logger.error("❌ DEBUG: No user_id provided")
+            return jsonify({"error": "User ID is required"}), 400
 
         mood, mood_level, mood_emoji = predict_mood(goals, concerns)
 
         logger.info(f"✅ Mood predicted: {mood} ({mood_level} {mood_emoji})")
 
-
-# Commenting out the database connection right now for testing purposes. Bring it back when IP is whitelisted on the MongoDB Atlas
+        # Store baseline mood score in new format
         try:
-            logger.info('user ID - ', user_id)
-            logger.info('time stamp - ', datetime.now(timezone.utc))
-            logger.info("Pushing data to database : ")
-            db.Mood_Score.insert_one({
-                "user_id:": user_id,
-                "mood": mood,
-                "mood_level": mood_level,
-                "mood_emoji": mood_emoji,
-                "created_at": datetime.now(timezone.utc)
+            from bson import ObjectId
+            today = datetime.now(timezone.utc).date().isoformat()
+            
+            logger.info(f"🔍 DEBUG: Storing score for user_id={user_id}, date={today}")
+            
+            # Check if score already exists for today
+            existing_score = db.user_scores.find_one({
+                "userId": ObjectId(user_id),
+                "date": today
             })
-
-            logger.info("Data pushed to database successfully")
+            
+            logger.info(f"🔍 DEBUG: Existing score found: {existing_score is not None}")
+            
+            if existing_score:
+                logger.info(f"🔍 DEBUG: Updating existing score: {existing_score}")
+                # Update existing score with baseline mood data
+                update_result = db.user_scores.update_one(
+                    {"userId": ObjectId(user_id), "date": today},
+                    {
+                        "$set": {
+                            "breakdown.moodLevel": float(mood_level),
+                            "updatedAt": datetime.now(timezone.utc)
+                        }
+                    }
+                )
+                logger.info(f"🔍 DEBUG: Update result: {update_result.modified_count} documents modified")
+            else:
+                logger.info("🔍 DEBUG: Creating new score document")
+                # Create new score document with baseline mood
+                score_doc = {
+                    "userId": ObjectId(user_id),
+                    "date": today,
+                    "overallScore": float(mood_level),  # Start with mood level as baseline
+                    "breakdown": {
+                        "moodLevel": float(mood_level),
+                        "socialScore": None,  # Will be updated when permissions granted
+                        "workStressScore": None,
+                        "screenTimePenalty": None,
+                        "interactionPenalty": None
+                    },
+                    "updatedAt": datetime.now(timezone.utc)
+                }
+                logger.info(f"🔍 DEBUG: Score document to insert: {score_doc}")
+                insert_result = db.user_scores.insert_one(score_doc)
+                logger.info(f"🔍 DEBUG: Insert result: {insert_result.inserted_id}")
 
         except Exception as e:
-            logger.error(f"❌ Error pushing data to database: {e}")
+            logger.error(f"❌ Error storing score in database: {e}")
+            import traceback
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
 
+        logger.info(f"🔍 DEBUG: Returning response with user_id={user_id}")
         return jsonify({
             "mood": mood,
             "mood_level": mood_level,
             "emoji": mood_emoji,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "user_id": user_id
         })
     except Exception as e:
         logger.error(f"❌ Error during prediction: {e}")
+        import traceback
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -1143,6 +1189,170 @@ def generate_workstress_report():
         return jsonify({"error": "Failed to generate work stress report", "details": str(error)}), 500
 
         # ---------------- Dashboard Work Stress Scores ---------------- 
+
+@app.route('/api/update-user-score', methods=['POST'])
+def update_user_score():
+    """Update user's daily score with all available metrics"""
+    try:
+        data = request.json
+        user_id = data.get('user_id', '')
+        
+        logger.info(f"🔍 DEBUG: update-user-score called with user_id={user_id}")
+        logger.info(f"🔍 DEBUG: Score data received: {data}")
+        
+        if not user_id:
+            logger.error("❌ DEBUG: No user_id provided")
+            return jsonify({"error": "User ID is required"}), 400
+        
+        from bson import ObjectId
+        today = datetime.now(timezone.utc).date().isoformat()
+        
+        logger.info(f"🔍 DEBUG: Looking for score on date={today}")
+        
+        # Get current score document
+        existing_score = db.user_scores.find_one({
+            "userId": ObjectId(user_id),
+            "date": today
+        })
+        
+        logger.info(f"🔍 DEBUG: Existing score found: {existing_score}")
+        
+        if not existing_score:
+            logger.error("❌ DEBUG: No baseline score found for today")
+            return jsonify({"error": "No baseline score found. Complete onboarding first."}), 400
+        
+        # Update with provided metrics
+        update_data = {"updatedAt": datetime.now(timezone.utc)}
+        
+        if 'socialScore' in data:
+            update_data["breakdown.socialScore"] = float(data['socialScore'])
+            logger.info(f"🔍 DEBUG: Adding socialScore={data['socialScore']}")
+        if 'workStressScore' in data:
+            update_data["breakdown.workStressScore"] = float(data['workStressScore'])
+            logger.info(f"🔍 DEBUG: Adding workStressScore={data['workStressScore']}")
+        if 'screenTimePenalty' in data:
+            update_data["breakdown.screenTimePenalty"] = float(data['screenTimePenalty'])
+            logger.info(f"🔍 DEBUG: Adding screenTimePenalty={data['screenTimePenalty']}")
+        if 'interactionPenalty' in data:
+            update_data["breakdown.interactionPenalty"] = float(data['interactionPenalty'])
+            logger.info(f"🔍 DEBUG: Adding interactionPenalty={data['interactionPenalty']}")
+        
+        logger.info(f"🔍 DEBUG: Update data: {update_data}")
+        
+        # Calculate new overall score
+        breakdown = existing_score.get('breakdown', {})
+        logger.info(f"🔍 DEBUG: Current breakdown: {breakdown}")
+        
+        scores = []
+        for key, value in breakdown.items():
+            if value is not None and isinstance(value, (int, float)):
+                scores.append(value)
+        
+        logger.info(f"🔍 DEBUG: Valid scores for calculation: {scores}")
+        
+        if scores:
+            new_overall = sum(scores) / len(scores)
+            update_data["overallScore"] = round(new_overall, 1)
+            logger.info(f"🔍 DEBUG: Calculated new overall score: {new_overall}")
+        
+        # Update the document
+        update_result = db.user_scores.update_one(
+            {"userId": ObjectId(user_id), "date": today},
+            {"$set": update_data}
+        )
+        
+        logger.info(f"🔍 DEBUG: Update result: {update_result.modified_count} documents modified")
+        
+        # Verify the update
+        updated_score = db.user_scores.find_one({
+            "userId": ObjectId(user_id),
+            "date": today
+        })
+        logger.info(f"🔍 DEBUG: Updated score after operation: {updated_score}")
+        
+        logger.info(f"✅ Updated score for user {user_id} on {today}")
+        
+        return jsonify({
+            "message": "Score updated successfully",
+            "overallScore": update_data.get("overallScore"),
+            "date": today
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"❌ Error updating user score: {str(e)}")
+        import traceback
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
+        return jsonify({"error": "Internal server error"}), 500
+
+@app.route('/api/user-scores/<user_id>', methods=['GET'])
+def get_user_scores(user_id):
+    """Get user's score history"""
+    try:
+        from bson import ObjectId
+        
+        # Get last 7 days of scores
+        end_date = datetime.now(timezone.utc).date()
+        start_date = end_date - timedelta(days=6)
+        
+        scores = list(db.user_scores.find({
+            "userId": ObjectId(user_id),
+            "date": {
+                "$gte": start_date.isoformat(),
+                "$lte": end_date.isoformat()
+            }
+        }).sort("date", 1))
+        
+        return jsonify({
+            "scores": scores,
+            "period": "week"
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching user scores: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
+@app.route('/api/user-profile/<user_id>', methods=['GET'])
+def get_user_profile(user_id):
+    """Get user profile and check if onboarding is complete"""
+    try:
+        from bson import ObjectId
+        
+        logger.info(f"🔍 DEBUG: get_user_profile called with user_id={user_id}")
+        
+        # Get user from database
+        user = db.users.find_one({"_id": ObjectId(user_id)})
+        logger.info(f"🔍 DEBUG: User found: {user is not None}")
+        
+        if not user:
+            logger.error("❌ DEBUG: User not found in database")
+            return jsonify({"error": "User not found"}), 404
+        
+        # Check if user has any scores (indicates onboarding completion)
+        has_scores = db.user_scores.find_one({"userId": ObjectId(user_id)})
+        logger.info(f"🔍 DEBUG: User has scores: {has_scores is not None}")
+        
+        if has_scores:
+            logger.info(f"🔍 DEBUG: Sample score document: {has_scores}")
+        
+        response_data = {
+            "user": {
+                "id": str(user['_id']),
+                "name": user['name'],
+                "email": user['email']
+            },
+            "onboarding_complete": has_scores is not None,
+            "has_scores": has_scores is not None
+        }
+        
+        logger.info(f"🔍 DEBUG: Returning profile data: {response_data}")
+        
+        return jsonify(response_data), 200
+        
+    except Exception as e:
+        logger.error(f"❌ Error fetching user profile: {str(e)}")
+        import traceback
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.route('/dashboard/scores', methods=['GET'])
 def get_dashboard_scores():

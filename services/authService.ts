@@ -8,6 +8,12 @@ export interface User {
   email: string;
 }
 
+export interface UserProfile {
+  user: User;
+  onboarding_complete: boolean;
+  has_scores: boolean;
+}
+
 export interface AuthResponse {
   message: string;
   user: User;
@@ -26,40 +32,72 @@ export interface PasswordValidation {
 
 class AuthService {
   private token: string | null = null;
+  private user: User | null = null;
+  private userProfile: UserProfile | null = null;
 
   constructor() {
-    // Load token from storage on initialization
-    this.loadToken();
+    // Load token and user data from storage on initialization
+    this.loadAuthData();
   }
 
-  private async loadToken() {
+  private async loadAuthData() {
     try {
-      // Load from AsyncStorage for React Native
-      const stored = await AsyncStorage.getItem('auth_token');
-      if (stored) {
-        this.token = stored;
+      // Load token and user data from AsyncStorage
+      const [storedToken, storedUser, storedProfile] = await Promise.all([
+        AsyncStorage.getItem('auth_token'),
+        AsyncStorage.getItem('auth_user'),
+        AsyncStorage.getItem('auth_profile')
+      ]);
+      
+      if (storedToken) {
+        this.token = storedToken;
+      }
+      
+      if (storedUser) {
+        this.user = JSON.parse(storedUser);
+      }
+      
+      if (storedProfile) {
+        this.userProfile = JSON.parse(storedProfile);
       }
     } catch (error) {
-      console.error('Error loading token:', error);
+      console.error('Error loading auth data:', error);
     }
   }
 
-  private async saveToken(token: string) {
+  private async saveAuthData(token: string, user: User, profile?: UserProfile) {
     try {
       this.token = token;
-      // Save to AsyncStorage for React Native
-      await AsyncStorage.setItem('auth_token', token);
+      this.user = user;
+      if (profile) {
+        this.userProfile = profile;
+      }
+      
+      // Save all auth data to AsyncStorage
+      await Promise.all([
+        AsyncStorage.setItem('auth_token', token),
+        AsyncStorage.setItem('auth_user', JSON.stringify(user)),
+        profile ? AsyncStorage.setItem('auth_profile', JSON.stringify(profile)) : Promise.resolve()
+      ]);
     } catch (error) {
-      console.error('Error saving token:', error);
+      console.error('Error saving auth data:', error);
     }
   }
 
-  private async clearToken() {
+  private async clearAuthData() {
     try {
       this.token = null;
-      await AsyncStorage.removeItem('auth_token');
+      this.user = null;
+      this.userProfile = null;
+      
+      // Clear all auth data from AsyncStorage
+      await Promise.all([
+        AsyncStorage.removeItem('auth_token'),
+        AsyncStorage.removeItem('auth_user'),
+        AsyncStorage.removeItem('auth_profile')
+      ]);
     } catch (error) {
-      console.error('Error clearing token:', error);
+      console.error('Error clearing auth data:', error);
     }
   }
 
@@ -83,8 +121,8 @@ class AuthService {
       throw new Error(data.error || 'Registration failed');
     }
 
-    // Save token on successful registration
-    await this.saveToken(data.token);
+    // Save auth data on successful registration
+    await this.saveAuthData(data.token, data.user);
     return data;
   }
 
@@ -106,8 +144,8 @@ class AuthService {
       throw new Error(data.error || 'Login failed');
     }
 
-    // Save token on successful login
-    await this.saveToken(data.token);
+    // Save auth data on successful login
+    await this.saveAuthData(data.token, data.user);
     return data;
   }
 
@@ -130,28 +168,146 @@ class AuthService {
       const data = await response.json();
 
       if (!response.ok) {
-        await this.clearToken();
+        await this.clearAuthData();
         return { valid: false };
       }
 
       return { valid: true, user: data.user };
     } catch (error) {
       console.error('Token verification error:', error);
-      await this.clearToken();
+      await this.clearAuthData();
       return { valid: false };
     }
   }
 
   async logout() {
-    await this.clearToken();
+    await this.clearAuthData();
+  }
+
+  async getUserProfile(): Promise<UserProfile | null> {
+    if (!this.user) {
+      console.log('🔍 DEBUG: getUserProfile called but no user found');
+      return null;
+    }
+
+    console.log(`🔍 DEBUG: Getting user profile for user_id=${this.user.id}`);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/user-profile/${this.user.id}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`
+        }
+      });
+
+      console.log(`🔍 DEBUG: Profile API response status: ${response.status}`);
+
+      if (!response.ok) {
+        console.error(`❌ DEBUG: Profile API failed with status ${response.status}`);
+        throw new Error('Failed to fetch user profile');
+      }
+
+      const profile = await response.json();
+      console.log(`🔍 DEBUG: Profile data received:`, profile);
+      
+      this.userProfile = profile;
+      
+      // Update stored profile
+      await AsyncStorage.setItem('auth_profile', JSON.stringify(profile));
+      console.log('🔍 DEBUG: Profile saved to AsyncStorage');
+      
+      return profile;
+    } catch (error) {
+      console.error('❌ DEBUG: Error fetching user profile:', error);
+      return null;
+    }
+  }
+
+  async updateUserScore(scoreData: {
+    socialScore?: number;
+    workStressScore?: number;
+    screenTimePenalty?: number;
+    interactionPenalty?: number;
+  }): Promise<boolean> {
+    if (!this.user) {
+      console.log('🔍 DEBUG: updateUserScore called but no user found');
+      return false;
+    }
+
+    console.log(`🔍 DEBUG: Updating user score for user_id=${this.user.id}`);
+    console.log(`🔍 DEBUG: Score data:`, scoreData);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/update-user-score`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`
+        },
+        body: JSON.stringify({
+          user_id: this.user.id,
+          ...scoreData
+        })
+      });
+
+      console.log(`🔍 DEBUG: Update score API response status: ${response.status}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error(`❌ DEBUG: Update score API failed:`, errorData);
+      }
+
+      const success = response.ok;
+      console.log(`🔍 DEBUG: Score update ${success ? 'successful' : 'failed'}`);
+      
+      return success;
+    } catch (error) {
+      console.error('❌ DEBUG: Error updating user score:', error);
+      return false;
+    }
+  }
+
+  async getUserScores(): Promise<any[]> {
+    if (!this.user) {
+      return [];
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/user-scores/${this.user.id}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch user scores');
+      }
+
+      const data = await response.json();
+      return data.scores || [];
+    } catch (error) {
+      console.error('Error fetching user scores:', error);
+      return [];
+    }
   }
 
   getToken(): string | null {
     return this.token;
   }
 
+  getCurrentUser(): User | null {
+    return this.user;
+  }
+
+  getUserProfileData(): UserProfile | null {
+    return this.userProfile;
+  }
+
   isAuthenticated(): boolean {
-    return this.token !== null;
+    return this.token !== null && this.user !== null;
   }
 
   // Client-side validation helpers

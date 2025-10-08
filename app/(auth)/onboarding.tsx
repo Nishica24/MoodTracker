@@ -1,15 +1,17 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, TextInput, Alert, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { CircleCheck as CheckCircle, ArrowRight, User, Target, Activity } from 'lucide-react-native';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function OnboardingScreen() {
   const [step, setStep] = useState(1);
   const insets = useSafeAreaInsets();
+  const { user, refreshUserProfile } = useAuth();
 
   type FormData = {
-    user_id: number;
+    user_id: string;
     name: string;
     age: string;
     goals: string[];
@@ -17,7 +19,7 @@ export default function OnboardingScreen() {
   };
 
   const [formData, setFormData] = useState<FormData>({
-    user_id: 123,
+    user_id: '',
     name: '',
     age: '',
     goals: [],
@@ -25,6 +27,12 @@ export default function OnboardingScreen() {
   });
 
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (user?.id) {
+      setFormData(prev => ({ ...prev, user_id: user.id }));
+    }
+  }, [user]);
 
   // Goals & Concerns (frontend wording kept same, backend handles normalization)
   const goals = [
@@ -86,6 +94,9 @@ export default function OnboardingScreen() {
 
         const result = await response.json();
         console.log('API result', result);
+
+        // Refresh user profile to mark onboarding as complete
+        await refreshUserProfile();
 
         router.push({
           pathname: '/(tabs)',

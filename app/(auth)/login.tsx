@@ -3,7 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, Stat
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Heart, Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
-import { authService } from '../../services/authService';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -12,6 +12,7 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const insets = useSafeAreaInsets();
+  const { login, userProfile } = useAuth();
 
   const validateForm = () => {
     const newErrors: {[key: string]: string} = {};
@@ -19,7 +20,7 @@ export default function LoginScreen() {
     // Email validation
     if (!email.trim()) {
       newErrors.email = 'Email is required';
-    } else if (!authService.validateEmail(email)) {
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       newErrors.email = 'Please enter a valid email address';
     }
 
@@ -41,17 +42,14 @@ export default function LoginScreen() {
     setErrors({});
 
     try {
-      await authService.login(email, password);
-      Alert.alert(
-        'Welcome Back!',
-        'You have successfully logged in.',
-        [
-          {
-            text: 'Continue',
-            onPress: () => router.replace('/(auth)/onboarding')
-          }
-        ]
-      );
+      await login(email, password);
+      
+      // Check if user has completed onboarding
+      if (userProfile?.onboarding_complete) {
+        router.replace('/(tabs)');
+      } else {
+        router.replace('/(auth)/onboarding');
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Login failed. Please try again.';
       Alert.alert('Login Failed', errorMessage);

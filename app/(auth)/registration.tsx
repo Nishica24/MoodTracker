@@ -3,7 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, Stat
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Heart, Mail, Lock, User, Eye, EyeOff } from 'lucide-react-native';
-import { authService } from '../../services/authService';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function RegistrationScreen() {
   const [name, setName] = useState('');
@@ -15,6 +15,7 @@ export default function RegistrationScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const insets = useSafeAreaInsets();
+  const { register } = useAuth();
 
   const validateForm = () => {
     const newErrors: {[key: string]: string} = {};
@@ -27,7 +28,7 @@ export default function RegistrationScreen() {
     // Email validation
     if (!email.trim()) {
       newErrors.email = 'Email is required';
-    } else if (!authService.validateEmail(email)) {
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       newErrors.email = 'Please enter a valid email address';
     }
 
@@ -35,7 +36,7 @@ export default function RegistrationScreen() {
     if (!password) {
       newErrors.password = 'Password is required';
     } else {
-      const passwordValidation = authService.validatePassword(password);
+      const passwordValidation = validatePassword(password);
       if (!passwordValidation.is_valid) {
         newErrors.password = passwordValidation.errors[0];
       }
@@ -52,6 +53,35 @@ export default function RegistrationScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const validatePassword = (password: string) => {
+    const errors: string[] = [];
+
+    if (password.length < 8) {
+      errors.push('Password must be at least 8 characters long');
+    }
+
+    if (!/[A-Z]/.test(password)) {
+      errors.push('Password must contain at least one uppercase letter');
+    }
+
+    if (!/[a-z]/.test(password)) {
+      errors.push('Password must contain at least one lowercase letter');
+    }
+
+    if (!/\d/.test(password)) {
+      errors.push('Password must contain at least one number');
+    }
+
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+      errors.push('Password must contain at least one special character');
+    }
+
+    return {
+      is_valid: errors.length === 0,
+      errors,
+    };
+  };
+
   const handleRegistration = async () => {
     if (!validateForm()) {
       return;
@@ -61,7 +91,7 @@ export default function RegistrationScreen() {
     setErrors({});
 
     try {
-      await authService.register(name, email, password, confirmPassword);
+      await register(name, email, password, confirmPassword);
       Alert.alert(
         'Success!',
         'Account created successfully. Welcome to MoodTracker!',
