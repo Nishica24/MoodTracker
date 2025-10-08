@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, Alert, Modal, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatsCard } from '@/components/StatsCard';
@@ -13,20 +13,24 @@ import { calculateSocialScore, getHistoricalSocialScores } from '../../scoreFunc
 import { handleCallLogPermission } from '@/services/permissions';
 import { SleepPermissionTester } from '@/components/SleepPermissionTester';
 import { SleepService, SleepSegment } from '@/services/SleepService';
-import { ScreenTimeService } from '@/services/ScreenTimeService';
+import { ScreenTimeService, ScreenTimeData, AppUsageData } from '@/services/ScreenTimeService';
 import { fetchDashboardScores, fetchWorkStress, handleMicrosoftLogin, checkMicrosoftConnection, setMicrosoftConnectionStatus, getMicrosoftConnectionStatus, setMicrosoftModalShown, getMicrosoftModalShown } from '@/services/microsoftPermission';
+import { calculateContextualScreenTimeScore, getScreenTimeInsights } from '@/scoreFunctions/contextualScreenTimeScore';
+import { UserProfile, getUserSpecificWeights, DEFAULT_USER_PROFILE } from '@/utils/userProfile';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // --- NEW FUNCTION ---
 /**
  * Returns a greeting based on the current hour of the day.
  */
 
-const getGreeting = (): string => {
+const getGreeting = (userName?: string): string => {
   const currentHour = new Date().getHours();
+  const name = userName ? `, ${userName}` : '';
 
- if (currentHour < 12) return 'Good morning!';
-   if (currentHour < 18) return 'Good afternoon!';
-   return 'Good evening!';
+  if (currentHour < 12) return `Good morning${name}!`;
+  if (currentHour < 18) return `Good afternoon${name}!`;
+  return `Good evening${name}!`;
 };
 
 /**
@@ -72,12 +76,12 @@ export default function DashboardScreen() {
   const data = result ? JSON.parse(result as string) : null;
   const insets = useSafeAreaInsets();
   const { user, updateUserScore } = useAuth();
-  
+
   console.log('🔍 DEBUG: Dashboard component render');
   console.log(`🔍 DEBUG: Result from params:`, result);
   console.log(`🔍 DEBUG: Parsed data:`, data);
   console.log(`🔍 DEBUG: Current user:`, user);
-  
+
   const [moodScores, setMoodScores] = useState<any[]>([]);
   const [socialScore, setSocialScore] = useState<number | null>(null);
   const [socialTrend, setSocialTrend] = useState<'up' | 'down' | 'stable'>('stable');
@@ -97,27 +101,111 @@ export default function DashboardScreen() {
   const [showMicrosoftModal, setShowMicrosoftModal] = useState<boolean>(false);
   const [shouldShowMicrosoftModal, setShouldShowMicrosoftModal] = useState<boolean>(false);
   const [screenTimeHoursToday, setScreenTimeHoursToday] = useState<number | null>(null);
+  const [screenTimeData, setScreenTimeData] = useState<ScreenTimeData[]>([]);
+  const [appUsageData, setAppUsageData] = useState<AppUsageData[]>([]);
+  const [contextualScreenTimeScore, setContextualScreenTimeScore] = useState<number | null>(null);
+  const [screenTimeInsights, setScreenTimeInsights] = useState<string[]>([]);
+  const [userProfile, setUserProfile] = useState<UserProfile>(DEFAULT_USER_PROFILE);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [showRefreshOverlay, setShowRefreshOverlay] = useState<boolean>(false);
+  const lastCalculatedScore = useRef<string>('');
+  const isRefreshingRef = useRef<boolean>(false);
+
+  // Load user profile from AsyncStorage
+  const loadUserProfile = async () => {
+    try {
+      const profileData = await AsyncStorage.getItem('user_profile');
+      if (profileData) {
+        const profile = JSON.parse(profileData);
+        setUserProfile(profile);
+        console.log('User profile loaded:', profile);
+      } else {
+        // Set default profile based on onboarding data if available
+        if (data?.age) {
+          const age = parseInt(data.age) || 25;
+          const role: 'student' | 'working_adult' | 'professional' =
+            age < 25 ? 'student' : age < 45 ? 'working_adult' : 'professional';
+
+          const defaultProfile: UserProfile = {
+            ...DEFAULT_USER_PROFILE,
+            age: age,
+            role: role
+          };
+          setUserProfile(defaultProfile);
+          await AsyncStorage.setItem('user_profile', JSON.stringify(defaultProfile));
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+      setUserProfile(DEFAULT_USER_PROFILE);
+    }
+  };
+
+  // Helper function to check Microsoft connection with retry
+  const checkMicrosoftConnectionWithRetry = async (maxRetries = 3, delayMs = 1000): Promise<boolean> => {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const isConnected = await checkMicrosoftConnection();
+        if (isConnected) {
+          return true;
+        }
+        if (attempt < maxRetries - 1) {
+          console.log(`Microsoft connection check attempt ${attempt + 1} failed, retrying in ${delayMs}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      } catch (error) {
+        console.error(`Microsoft connection check attempt ${attempt + 1} error:`, error);
+        if (attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      }
+    }
+    return false;
+  };
   const fetchScreenTimeSummary = async () => {
     try {
       const hasUsageAccess = await ScreenTimeService.checkPermission();
       if (!hasUsageAccess) {
         setScreenTimeHoursToday(null);
+        setScreenTimeData([]);
+        setAppUsageData([]);
+        setContextualScreenTimeScore(null);
+        setScreenTimeInsights([]);
         return;
       }
 
-      const data = await ScreenTimeService.getScreenTimeData();
-      if (Array.isArray(data) && data.length > 0) {
-        const latest = data[data.length - 1];
+      const [screenData, appData] = await Promise.all([
+        ScreenTimeService.getScreenTimeData(),
+        ScreenTimeService.getAppUsageData()
+      ]);
+
+      setScreenTimeData(screenData);
+      setAppUsageData(appData);
+
+      if (Array.isArray(screenData) && screenData.length > 0) {
+        const latest = screenData[screenData.length - 1];
         const hours = latest?.screenTimeHours ?? (latest?.screenTimeMs ? latest.screenTimeMs / (1000 * 60 * 60) : null);
         setScreenTimeHoursToday(typeof hours === 'number' ? Math.round(hours * 10) / 10 : null);
       } else {
         setScreenTimeHoursToday(null);
       }
+
+      // Calculate contextual screen time score
+      if (screenData.length > 0 && appData.length > 0) {
+        const contextualScore = calculateContextualScreenTimeScore(screenData, appData, userProfile);
+        setContextualScreenTimeScore(contextualScore);
+
+        // Get insights
+        const insights = getScreenTimeInsights(screenData, appData, userProfile);
+        setScreenTimeInsights(insights);
+      }
     } catch (e) {
       console.error('Failed to fetch screen time summary:', e);
       setScreenTimeHoursToday(null);
+      setScreenTimeData([]);
+      setAppUsageData([]);
+      setContextualScreenTimeScore(null);
+      setScreenTimeInsights([]);
     }
   };
 
@@ -211,11 +299,11 @@ export default function DashboardScreen() {
 
       const result = await response.json();
       console.log(`🔍 DEBUG: User scores from DB:`, result);
-      
+
       // Get today's score
       const today = new Date().toISOString().split('T')[0];
       const todayScore = result.scores?.find((score: any) => score.date === today);
-      
+
       console.log(`🔍 DEBUG: Today's score:`, todayScore);
       return todayScore;
     } catch (error) {
@@ -231,9 +319,12 @@ export default function DashboardScreen() {
         console.log('🔍 DEBUG: Initializing dashboard');
         setIsLoading(true);
 
+        // Load user profile first
+        await loadUserProfile();
+
         // --- Initial logic for mood data ---
         let moodData = data; // From onboarding params
-        
+
         // If no data from params (returning user), fetch from database
         if (!moodData && user?.id) {
           console.log('🔍 DEBUG: No params data, fetching from database');
@@ -321,55 +412,80 @@ export default function DashboardScreen() {
       // --- MICROSOFT DASHBOARD SCORES ---
       // Step 5: Check if user has previously connected Microsoft account
       try {
-        const isConnected = await checkMicrosoftConnection();
         const localConnectionStatus = await getMicrosoftConnectionStatus();
-        
-        if (isConnected && localConnectionStatus) {
-          // User is connected, fetch their scores
-          const scores = await fetchDashboardScores();
-          setDashboardScores(scores);
-          setMicrosoftConnected(true);
-          console.log('Microsoft dashboard scores loaded:', scores);
+        console.log('Microsoft connection check - Local status:', localConnectionStatus);
+
+        if (localConnectionStatus) {
+          // Local storage says user is connected, try to fetch data with retry
+          console.log('Local storage indicates Microsoft is connected, fetching data...');
+          try {
+            const scores = await fetchDashboardScores();
+            setDashboardScores(scores);
+            setMicrosoftConnected(true);
+            console.log('Microsoft dashboard scores loaded:', scores);
+          } catch (fetchError) {
+            console.error('Failed to fetch Microsoft scores despite local connection status:', fetchError);
+            // If fetch fails, try backend connection check with retry
+            const isBackendConnected = await checkMicrosoftConnectionWithRetry();
+            if (isBackendConnected) {
+              try {
+                const scores = await fetchDashboardScores();
+                setDashboardScores(scores);
+                setMicrosoftConnected(true);
+                console.log('Microsoft dashboard scores loaded after retry:', scores);
+              } catch (retryError) {
+                console.error('Failed to fetch Microsoft scores even after retry:', retryError);
+                setMicrosoftConnected(false);
+                await setMicrosoftConnectionStatus(false);
+                setDashboardScores(null);
+                const hasBeenShown = await getMicrosoftModalShown();
+                if (!hasBeenShown) setShouldShowMicrosoftModal(true);
+              }
+            } else {
+              // Backend also says not connected, reset local status
+              setMicrosoftConnected(false);
+              await setMicrosoftConnectionStatus(false);
+              setDashboardScores(null);
+              const hasBeenShown = await getMicrosoftModalShown();
+              if (!hasBeenShown) setShouldShowMicrosoftModal(true);
+            }
+          }
         } else {
-          // User not connected, use static fallback data
-          setMicrosoftConnected(false);
-          await setMicrosoftConnectionStatus(false);
-          
-          // Use static fallback data when Microsoft is not connected
-          setDashboardScores({
-            work_stress: { score: 4.2, level: 'Moderate', trend: 'stable' },
-            email_activity: { score: 3.5, count: 0, after_hours: 0 },
-            calendar_busyness: { score: 5.0, meeting_hours: 0, back_to_back_meetings: 0, early_morning_meetings: 0 },
-            overall_productivity: { score: 4.2, level: 'Moderate' }
-          });
-          console.log('Using static work stress data - Microsoft not connected');
-          
-          // Only show Microsoft modal if user hasn't been shown it before
-          const hasBeenShown = await getMicrosoftModalShown();
-          if (!hasBeenShown) {
-            setShouldShowMicrosoftModal(true);
+          // Local storage says not connected, check backend with retry
+          console.log('Local storage indicates Microsoft is not connected, checking backend...');
+          const isBackendConnected = await checkMicrosoftConnectionWithRetry();
+          if (isBackendConnected) {
+            try {
+              const scores = await fetchDashboardScores();
+              setDashboardScores(scores);
+              setMicrosoftConnected(true);
+              await setMicrosoftConnectionStatus(true); // Sync local storage
+              console.log('Microsoft dashboard scores loaded from backend:', scores);
+            } catch (fetchError) {
+              console.error('Failed to fetch Microsoft scores from backend:', fetchError);
+              setMicrosoftConnected(false);
+              await setMicrosoftConnectionStatus(false);
+              setDashboardScores(null);
+              const hasBeenShown = await getMicrosoftModalShown();
+              if (!hasBeenShown) setShouldShowMicrosoftModal(true);
+            }
+          } else {
+            // Neither local nor backend indicates connection
+            setMicrosoftConnected(false);
+            await setMicrosoftConnectionStatus(false);
+            setDashboardScores(null);
+            const hasBeenShown = await getMicrosoftModalShown();
+            if (!hasBeenShown) setShouldShowMicrosoftModal(true);
           }
         }
       } catch (error) {
         console.error('Microsoft connection check failed:', error);
-        // On error, use static fallback data
+        // On error, do not set static data. Keep UI waiting and prompt connect.
         setMicrosoftConnected(false);
         await setMicrosoftConnectionStatus(false);
-        
-        // Use static fallback data when there's an error
-        setDashboardScores({
-          work_stress: { score: 4.2, level: 'Moderate', trend: 'stable' },
-          email_activity: { score: 3.5, count: 0, after_hours: 0 },
-          calendar_busyness: { score: 5.0, meeting_hours: 0, back_to_back_meetings: 0, early_morning_meetings: 0 },
-          overall_productivity: { score: 4.2, level: 'Moderate' }
-        });
-        console.log('Using static work stress data - Microsoft connection check failed');
-        
-        // Only show Microsoft modal if user hasn't been shown it before
+        setDashboardScores(null);
         const hasBeenShown = await getMicrosoftModalShown();
-        if (!hasBeenShown) {
-          setShouldShowMicrosoftModal(true);
-        }
+        if (!hasBeenShown) setShouldShowMicrosoftModal(true);
       }
 
       setIsLoading(false);
@@ -378,24 +494,72 @@ export default function DashboardScreen() {
     initializeDashboard();
   }, [user?.id]); // Add user.id as dependency to re-run when user changes
 
-  // --- NEW --- This useEffect reacts to changes in the social score and updates the overall score
+  // --- HELPERS: scoring conversions ---
+  const computeWeightedAverage = (parts: Array<{ value: number | null; weight: number }>): number | null => {
+    const available = parts.filter(p => typeof p.value === 'number' && !isNaN(p.value as number));
+    if (available.length === 0) return null;
+    const totalWeight = available.reduce((sum, p) => sum + p.weight, 0);
+    if (totalWeight === 0) return null;
+    const weighted = available.reduce((sum, p) => sum + (p.value as number) * p.weight, 0);
+    return weighted / totalWeight;
+  };
+
+  // --- OVERALL SCORE: include mood, social, work stress, contextual screen time ---
   useEffect(() => {
-    console.log("Detected a change in social score, recalculating overall score...");
-    if (data?.mood_level) {
-        if (socialScore !== null) {
-            // --- Weighted Average Calculation ---
-            // You can adjust these weights as you see fit.
-            const moodWeight = 0.6; // 60%
-            const socialWeight = 0.4; // 40%
-            const newOverallScore = (data.mood_level * moodWeight) + (socialScore * socialWeight);
-            setOverallScore(newOverallScore);
-            console.log(`New Overall Score: ${newOverallScore.toFixed(1)} (Mood: ${data.mood_level}, Social: ${socialScore})`);
-        } else {
-            // If social score isn't available, the overall score is just the mood level
-            setOverallScore(data.mood_level);
-        }
+    if (!data?.mood_level) return;
+
+    // Base mood (0-10, higher is better)
+    const mood = data.mood_level as number;
+
+    // Social score (0-10, higher is better)
+    const social = socialScore;
+
+    // Work stress comes as 1-10 (higher = more stress). Convert to wellbeing: 10 - stress
+    const workStressRaw: number | null = dashboardScores?.work_stress?.score ?? null;
+    const workWellbeing: number | null = typeof workStressRaw === 'number' ? Math.max(0, Math.min(10, 10 - workStressRaw)) : null;
+
+    // Use contextual screen time score if available, otherwise fallback to simple calculation
+    let screenWellbeing: number | null = null;
+    if (contextualScreenTimeScore !== null) {
+      screenWellbeing = contextualScreenTimeScore;
+    } else if (screenTimeHoursToday !== null) {
+      // Fallback: map hours to wellbeing (0h->10, 9h->~2)
+      const clampedHours = Math.max(0, Math.min(9, screenTimeHoursToday));
+      screenWellbeing = 10 - (clampedHours * (8 / 9));
     }
-  }, [socialScore, data]);
+
+    // Get user-specific weights
+    const weights = getUserSpecificWeights(userProfile.age, userProfile.role);
+
+    // Weights (automatically re-normalized for missing parts)
+    const parts = [
+      { value: mood, weight: weights.mood },
+      { value: social, weight: weights.social },
+      { value: workWellbeing, weight: weights.workStress },
+      { value: screenWellbeing, weight: weights.screenTime },
+    ];
+
+    const combined = computeWeightedAverage(parts);
+    if (combined !== null) {
+      setOverallScore(combined);
+
+      // Create a unique key for this calculation to prevent duplicate logging
+      const scoreKey = `${mood}-${social}-${workWellbeing}-${screenWellbeing}-${userProfile.age}-${userProfile.role}`;
+
+      // Only log if:
+      // 1. The score actually changed AND
+      // 2. We're not currently refreshing (to avoid multiple logs during refresh)
+      if (lastCalculatedScore.current !== scoreKey && !isRefreshingRef.current) {
+        console.log(
+          `Overall Score → ${combined.toFixed(1)} (Mood: ${mood}${typeof social === 'number' ? `, Social: ${social}` : ''}${typeof workWellbeing === 'number' ? `, WorkWellbeing: ${workWellbeing}` : ''}${typeof screenWellbeing === 'number' ? `, ScreenWellbeing: ${screenWellbeing}` : ''}) [Weights: ${JSON.stringify(weights)}]`
+        );
+        lastCalculatedScore.current = scoreKey;
+      }
+    } else {
+      setOverallScore(mood);
+    }
+  }, [data, socialScore, dashboardScores, contextualScreenTimeScore, screenTimeHoursToday, userProfile.age, userProfile.role]);
+
 
   // --- AUTOMATIC SLEEP TRACKING ---
   useEffect(() => {
@@ -412,33 +576,34 @@ export default function DashboardScreen() {
     
     try {
       setIsRefreshing(true);
+      isRefreshingRef.current = true; // Set ref flag
       setShowRefreshOverlay(true); // Show full page loading overlay
       console.log('🔍 DEBUG: Refreshing all dashboard scores...');
       
-      // Refresh Microsoft scores (only if user is connected)
-      if (microsoftConnected) {
-        try {
+      // Always try to refresh Microsoft scores (check connection status first)
+      try {
+        const isConnected = await checkMicrosoftConnectionWithRetry();
+        if (isConnected) {
           const scores = await fetchDashboardScores();
           setDashboardScores(scores);
           setMicrosoftConnected(true);
-          console.log('🔍 DEBUG: Microsoft scores refreshed:', scores);
-          
-          // Update user score in database
-          if (user?.id && scores?.work_stress?.score) {
-            console.log(`🔍 DEBUG: Updating work stress score in DB: ${scores.work_stress.score}`);
-            await updateUserScore({
-              workStressScore: scores.work_stress.score
-            });
-          }
-        } catch (error) {
-          console.error('❌ DEBUG: Failed to refresh Microsoft scores:', error);
+          await setMicrosoftConnectionStatus(true);
+          console.log('Microsoft scores refreshed:', scores);
+        } else {
+          // Not connected, clear Microsoft data
           setMicrosoftConnected(false);
+          await setMicrosoftConnectionStatus(false);
+          setDashboardScores(null);
+          console.log('Microsoft not connected, cleared work stress data');
         }
-      } else {
-        console.log('🔍 DEBUG: Microsoft not connected, skipping work stress refresh');
+      } catch (error) {
+        console.error('Failed to refresh Microsoft scores:', error);
+        setMicrosoftConnected(false);
+        await setMicrosoftConnectionStatus(false);
+        setDashboardScores(null);
       }
 
-      // Refresh social score
+      // Always refresh social score
       try {
         await updateDailyHistory();
         const socialScore = await calculateSocialScore();
@@ -446,7 +611,7 @@ export default function DashboardScreen() {
         const trend = await calculateSocialTrend();
         setSocialTrend(trend);
         console.log(`🔍 DEBUG: Social score refreshed: ${socialScore}`);
-        
+
         // Update user score in database
         if (user?.id && socialScore !== null) {
           console.log(`🔍 DEBUG: Updating social score in DB: ${socialScore}`);
@@ -458,11 +623,11 @@ export default function DashboardScreen() {
         console.error('❌ DEBUG: Failed to refresh social score:', error);
       }
 
-      // Refresh screen time data
+      // Always refresh screen time data
       try {
         await fetchScreenTimeSummary();
         console.log('🔍 DEBUG: Screen time data refreshed');
-        
+
         // Update user score in database with screen time penalty
         if (user?.id && screenTimeHoursToday !== null) {
           const penalty = Math.max(0, (screenTimeHoursToday - 6) * 0.5); // Penalty for > 6 hours
@@ -475,12 +640,39 @@ export default function DashboardScreen() {
         console.error('❌ DEBUG: Failed to refresh screen time:', error);
       }
 
+      // Always recalculate contextual screen time score after fetching fresh data
+      // This will use the fresh screenTimeData and appUsageData from fetchScreenTimeSummary
+      try {
+        // Get fresh data for contextual calculation
+        const [freshScreenData, freshAppData] = await Promise.all([
+          ScreenTimeService.getScreenTimeData(),
+          ScreenTimeService.getAppUsageData()
+        ]);
+
+        if (freshScreenData.length > 0 && freshAppData.length > 0) {
+          const contextualScore = calculateContextualScreenTimeScore(freshScreenData, freshAppData, userProfile);
+          setContextualScreenTimeScore(contextualScore);
+
+          const insights = getScreenTimeInsights(freshScreenData, freshAppData, userProfile);
+          setScreenTimeInsights(insights);
+          console.log('Contextual screen time score refreshed:', contextualScore);
+        } else {
+          setContextualScreenTimeScore(null);
+          setScreenTimeInsights([]);
+          console.log('No screen time data available for contextual calculation');
+        }
+      } catch (error) {
+        console.error('Failed to refresh contextual screen time score:', error);
+        setContextualScreenTimeScore(null);
+        setScreenTimeInsights([]);
+      }
+
       // Refresh sleep data (if permission granted)
       if (permissionStatus === 'Granted') {
         try {
           // Sleep data refreshes automatically via listener, but we can trigger a check
           console.log('🔍 DEBUG: Sleep data is being tracked automatically');
-          
+
           // Update user score in database with sleep score
           if (user?.id && sleepScore !== null) {
             console.log(`🔍 DEBUG: Updating sleep score in DB: ${sleepScore}`);
@@ -493,11 +685,31 @@ export default function DashboardScreen() {
         }
       }
 
+      console.log('All scores refreshed successfully!');
+
+      // Log the final score after a brief delay to ensure all state updates are complete
+      setTimeout(() => {
+        if (overallScore !== null) {
+          const mood = data?.mood_level as number;
+          const social = socialScore;
+          const workStressRaw: number | null = dashboardScores?.work_stress?.score ?? null;
+          const workWellbeing: number | null = typeof workStressRaw === 'number' ? Math.max(0, Math.min(10, 10 - workStressRaw)) : null;
+          const screenWellbeing = contextualScreenTimeScore !== null ? contextualScreenTimeScore :
+            (screenTimeHoursToday !== null ? 10 - (Math.max(0, Math.min(9, screenTimeHoursToday)) * (8 / 9)) : null);
+          const weights = getUserSpecificWeights(userProfile.age, userProfile.role);
+
+          console.log(
+            `Overall Score → ${overallScore.toFixed(1)} (Mood: ${mood}${typeof social === 'number' ? `, Social: ${social}` : ''}${typeof workWellbeing === 'number' ? `, WorkWellbeing: ${workWellbeing}` : ''}${typeof screenWellbeing === 'number' ? `, ScreenWellbeing: ${screenWellbeing}` : ''}) [Weights: ${JSON.stringify(weights)}]`
+          );
+        }
+      }, 100);
+
       console.log('🔍 DEBUG: All scores refreshed successfully!');
     } catch (error) {
       console.error('❌ DEBUG: Error refreshing all scores:', error);
     } finally {
       setIsRefreshing(false);
+      isRefreshingRef.current = false; // Clear ref flag
       // Add a small delay before hiding overlay for better UX
       setTimeout(() => {
         setShowRefreshOverlay(false);
@@ -517,8 +729,17 @@ export default function DashboardScreen() {
         setMicrosoftConnected(true);
         // Save connection status to shared storage for Connections tab
         await setMicrosoftConnectionStatus(true);
-        // Note: Removed automatic refreshAllScores() call to prevent unwanted page reload
-        // User can manually refresh using the refresh button if needed
+
+        // Immediately fetch Microsoft data after successful connection
+        try {
+          const scores = await fetchDashboardScores();
+          setDashboardScores(scores);
+          console.log('Microsoft dashboard scores loaded after connection:', scores);
+        } catch (fetchError) {
+          console.error('Failed to fetch Microsoft scores after connection:', fetchError);
+          // Don't reset connection status, just log the error
+          // User can manually refresh if needed
+        }
       } else {
         console.log('Microsoft login failed or was cancelled');
         setMicrosoftConnected(false);
@@ -586,10 +807,10 @@ export default function DashboardScreen() {
       {
         icon: Zap,
         title: 'Work Stress',
-        value: dashboardScores ? `${dashboardScores.work_stress.score}/10` : '4.2/10',
-        subtitle: dashboardScores ? `${dashboardScores.work_stress.level} level` : 'Moderate level',
+        value: dashboardScores?.work_stress?.score ? `${dashboardScores.work_stress.score}/10` : '…',
+        subtitle: dashboardScores?.work_stress?.level ? `${dashboardScores.work_stress.level} level` : 'Connect Microsoft to view',
         color: '#F59E0B',
-        trend: dashboardScores ? dashboardScores.work_stress.trend : 'stable',
+        trend: dashboardScores?.work_stress?.trend ?? 'stable',
         onPress: () => router.push('./work-stress')
       },
       {
@@ -625,7 +846,7 @@ export default function DashboardScreen() {
         <View style={[styles.header, { paddingTop: insets.top + 40 }]}>
           <View style={styles.headerTop}>
             <View>
-              <Text style={styles.greeting}>{getGreeting()}</Text>
+              <Text style={styles.greeting}>{getGreeting(userProfile.name)}</Text>
               <Text style={styles.subtitle}>How are you feeling today?</Text>
             </View>
             <View style={styles.headerActions}>
