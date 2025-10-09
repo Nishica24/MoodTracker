@@ -256,24 +256,43 @@ def refresh_access_token(device_id):
 @app.route('/connection-status', methods=['GET'])
 def connection_status():
     device_id = request.args.get('device_id', '').strip()
+    logger.info(f"🔍 DEBUG: Connection status check for device_id={device_id}")
+    
     if not device_id:
-        return jsonify({"connected": False}), 200
+        logger.warning("⚠️ DEBUG: No device_id provided")
+        return jsonify({"connected": False, "reason": "no_device_id"}), 200
     
     token = ms_tokens.get(device_id)
+    logger.info(f"🔍 DEBUG: Token exists for device_id: {token is not None}")
+    
     if not token:
-        return jsonify({"connected": False}), 200
+        logger.warning(f"⚠️ DEBUG: No token found for device_id={device_id}")
+        return jsonify({"connected": False, "reason": "no_token"}), 200
     
     # Check if token is expired
-    if token.get('expires_at') and token['expires_at'] <= datetime.now(timezone.utc):
-        # Try to refresh the token
-        if refresh_access_token(device_id):
-            return jsonify({"connected": True})
+    if token.get('expires_at'):
+        expires_at = token['expires_at']
+        now = datetime.now(timezone.utc)
+        logger.info(f"🔍 DEBUG: Token expires at: {expires_at}, Current time: {now}")
+        
+        if expires_at <= now:
+            logger.info(f"🔄 DEBUG: Token expired, attempting refresh for device_id={device_id}")
+            # Try to refresh the token
+            if refresh_access_token(device_id):
+                logger.info(f"✅ DEBUG: Token refreshed successfully for device_id={device_id}")
+                return jsonify({"connected": True, "reason": "refreshed"})
+            else:
+                logger.error(f"❌ DEBUG: Token refresh failed for device_id={device_id}")
+                # Remove invalid token
+                if device_id in ms_tokens:
+                    del ms_tokens[device_id]
+                return jsonify({"connected": False, "reason": "refresh_failed"})
         else:
-            # Remove invalid token
-            del ms_tokens[device_id]
-            return jsonify({"connected": False})
-    
-    return jsonify({"connected": True})
+            logger.info(f"✅ DEBUG: Token is still valid for device_id={device_id}")
+            return jsonify({"connected": True, "reason": "valid_token"})
+    else:
+        logger.warning(f"⚠️ DEBUG: No expiration time found for device_id={device_id}")
+        return jsonify({"connected": True, "reason": "no_expiration"})
 
 # ---------------- User Authentication Endpoints ----------------
 
@@ -452,23 +471,39 @@ def debug_devices():
 
 def get_valid_access_token(device_id):
     """Get a valid access token, refreshing if necessary"""
-
-#     logger.info(f"Checking ms tokens data in get_valid_access_token function {ms_tokens}")
-
+    logger.info(f"🔍 DEBUG: Getting valid access token for device_id={device_id}")
+    
     token_data = ms_tokens.get(device_id)
-
-#     logger.info(f"Printing token_data: {token_data}")
-
+    logger.info(f"🔍 DEBUG: Token data exists: {token_data is not None}")
+    
     if not token_data:
+        logger.warning(f"⚠️ DEBUG: No token data found for device_id={device_id}")
         return None
     
     # Check if token is expired
-    if token_data.get('expires_at') and token_data['expires_at'] <= datetime.now(timezone.utc):
-        if not refresh_access_token(device_id):
-            return None
-        token_data = ms_tokens.get(device_id)
+    if token_data.get('expires_at'):
+        expires_at = token_data['expires_at']
+        now = datetime.now(timezone.utc)
+        logger.info(f"🔍 DEBUG: Token expires at: {expires_at}, Current time: {now}")
+        
+        if expires_at <= now:
+            logger.info(f"🔄 DEBUG: Token expired, attempting refresh for device_id={device_id}")
+            if not refresh_access_token(device_id):
+                logger.error(f"❌ DEBUG: Token refresh failed for device_id={device_id}")
+                # Remove invalid token from storage
+                if device_id in ms_tokens:
+                    del ms_tokens[device_id]
+                return None
+            token_data = ms_tokens.get(device_id)
+            logger.info(f"✅ DEBUG: Token refreshed successfully for device_id={device_id}")
+        else:
+            logger.info(f"✅ DEBUG: Token is still valid for device_id={device_id}")
+    else:
+        logger.warning(f"⚠️ DEBUG: No expiration time found for device_id={device_id}")
     
-    return token_data.get('access_token')
+    access_token = token_data.get('access_token')
+    logger.info(f"🔍 DEBUG: Returning access token: {access_token is not None}")
+    return access_token
 
 @app.route('/graph/work-stress', methods=['GET'])
 def graph_work_stress():
@@ -1302,10 +1337,21 @@ def get_user_scores(user_id):
             }
         }).sort("date", -1))
 
-
+        # Convert ObjectId fields to strings for JSON serialization
+        serializable_scores = []
+        for score in scores:
+            serializable_score = {
+                "_id": str(score["_id"]),
+                "userId": str(score["userId"]),
+                "date": score["date"],
+                "overallScore": score.get("overallScore"),
+                "breakdown": score.get("breakdown", {}),
+                "updatedAt": score.get("updatedAt").isoformat() if score.get("updatedAt") else None
+            }
+            serializable_scores.append(serializable_score)
 
         data = jsonify({
-            "scores": scores,
+            "scores": serializable_scores,
             "period": "week"
         }), 200
 

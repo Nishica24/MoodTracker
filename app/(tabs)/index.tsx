@@ -417,80 +417,39 @@ export default function DashboardScreen() {
       }
 
       // --- MICROSOFT DASHBOARD SCORES ---
-      // Step 5: Check if user has previously connected Microsoft account
+      // Step 5: Check actual Microsoft connection status (like other connections do)
       try {
-        const localConnectionStatus = await getMicrosoftConnectionStatus();
-        console.log('Microsoft connection check - Local status:', localConnectionStatus);
+        const microsoftConnected = await checkMicrosoftConnection();
+        console.log('Microsoft connection check - Backend status:', microsoftConnected);
 
-        if (localConnectionStatus) {
-          // Local storage says user is connected, try to fetch data with retry
-          console.log('Local storage indicates Microsoft is connected, fetching data...');
+        setMicrosoftConnected(microsoftConnected);
+
+        if (microsoftConnected) {
+          // Backend says user is connected, try to fetch data
+          console.log('Backend indicates Microsoft is connected, fetching data...');
           try {
             const scores = await fetchDashboardScores();
             setDashboardScores(scores);
-            setMicrosoftConnected(true);
             console.log('Microsoft dashboard scores loaded:', scores);
           } catch (fetchError) {
-            console.error('Failed to fetch Microsoft scores despite local connection status:', fetchError);
-            // If fetch fails, try backend connection check with retry
-            const isBackendConnected = await checkMicrosoftConnectionWithRetry();
-            if (isBackendConnected) {
-              try {
-                const scores = await fetchDashboardScores();
-                setDashboardScores(scores);
-                setMicrosoftConnected(true);
-                console.log('Microsoft dashboard scores loaded after retry:', scores);
-              } catch (retryError) {
-                console.error('Failed to fetch Microsoft scores even after retry:', retryError);
-                setMicrosoftConnected(false);
-                await setMicrosoftConnectionStatus(false);
-                setDashboardScores(null);
-                const hasBeenShown = await getMicrosoftModalShown();
-                if (!hasBeenShown) setShouldShowMicrosoftModal(true);
-              }
-            } else {
-              // Backend also says not connected, reset local status
-              setMicrosoftConnected(false);
-              await setMicrosoftConnectionStatus(false);
-              setDashboardScores(null);
-              const hasBeenShown = await getMicrosoftModalShown();
-              if (!hasBeenShown) setShouldShowMicrosoftModal(true);
-            }
+            console.error('Failed to fetch Microsoft scores despite backend connection:', fetchError);
+            // Don't disconnect - just show that data is temporarily unavailable
+            setDashboardScores(null);
+            console.log('Microsoft data temporarily unavailable, but connection status preserved');
           }
         } else {
-          // Local storage says not connected, check backend with retry
-          console.log('Local storage indicates Microsoft is not connected, checking backend...');
-          const isBackendConnected = await checkMicrosoftConnectionWithRetry();
-          if (isBackendConnected) {
-            try {
-              const scores = await fetchDashboardScores();
-              setDashboardScores(scores);
-              setMicrosoftConnected(true);
-              await setMicrosoftConnectionStatus(true); // Sync local storage
-              console.log('Microsoft dashboard scores loaded from backend:', scores);
-            } catch (fetchError) {
-              console.error('Failed to fetch Microsoft scores from backend:', fetchError);
-              setMicrosoftConnected(false);
-              await setMicrosoftConnectionStatus(false);
-              setDashboardScores(null);
-              const hasBeenShown = await getMicrosoftModalShown();
-              if (!hasBeenShown) setShouldShowMicrosoftModal(true);
-            }
-          } else {
-            // Neither local nor backend indicates connection
-            setMicrosoftConnected(false);
-            await setMicrosoftConnectionStatus(false);
-            setDashboardScores(null);
-            const hasBeenShown = await getMicrosoftModalShown();
-            if (!hasBeenShown) setShouldShowMicrosoftModal(true);
-          }
+          // Backend says not connected, check if we should show modal
+          setDashboardScores(null);
+          const hasBeenShown = await getMicrosoftModalShown();
+          if (!hasBeenShown) setShouldShowMicrosoftModal(true);
         }
       } catch (error) {
         console.error('Microsoft connection check failed:', error);
-        // On error, do not set static data. Keep UI waiting and prompt connect.
+        // On error, assume not connected and clear data
         setMicrosoftConnected(false);
-        await setMicrosoftConnectionStatus(false);
         setDashboardScores(null);
+        
+        // Show modal if user hasn't seen it before
         const hasBeenShown = await getMicrosoftModalShown();
         if (!hasBeenShown) setShouldShowMicrosoftModal(true);
       }
@@ -587,27 +546,25 @@ export default function DashboardScreen() {
       setShowRefreshOverlay(true); // Show full page loading overlay
       console.log('🔍 DEBUG: Refreshing all dashboard scores...');
       
-      // Always try to refresh Microsoft scores (check connection status first)
-      try {
-        const isConnected = await checkMicrosoftConnectionWithRetry();
-        if (isConnected) {
+      // Try to refresh Microsoft scores (check actual backend status like other connections)
+      const microsoftConnected = await checkMicrosoftConnection();
+      setMicrosoftConnected(microsoftConnected);
+      
+      if (microsoftConnected) {
+        try {
           const scores = await fetchDashboardScores();
           setDashboardScores(scores);
-          setMicrosoftConnected(true);
-          await setMicrosoftConnectionStatus(true);
           console.log('Microsoft scores refreshed:', scores);
-        } else {
-          // Not connected, clear Microsoft data
-          setMicrosoftConnected(false);
-          await setMicrosoftConnectionStatus(false);
+        } catch (error) {
+          console.error('Failed to refresh Microsoft scores:', error);
+          // Don't disconnect - just clear data temporarily
           setDashboardScores(null);
-          console.log('Microsoft not connected, cleared work stress data');
+          console.log('Microsoft data temporarily unavailable during refresh, but connection status preserved');
         }
-      } catch (error) {
-        console.error('Failed to refresh Microsoft scores:', error);
-        setMicrosoftConnected(false);
-        await setMicrosoftConnectionStatus(false);
+      } else {
+        // Not connected, clear data
         setDashboardScores(null);
+        console.log('Microsoft not connected, cleared work stress data');
       }
 
       // Always refresh social score

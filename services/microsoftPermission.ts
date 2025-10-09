@@ -90,9 +90,18 @@ export const checkMicrosoftConnection = async (): Promise<boolean> => {
     const base = 'http://localhost:5000';
     const res = await fetch(`${base}/connection-status?device_id=${encodeURIComponent(deviceId)}`);
     const json = await res.json();
-    return json?.connected || false;
+    
+    console.log(`🔍 DEBUG: Microsoft connection check result:`, json);
+    
+    const isConnected = json?.connected || false;
+    
+    // Don't automatically sync local storage - let user manually disconnect
+    // This prevents the connections tab from showing disconnected when app reopens
+    
+    return isConnected;
   } catch (error) {
     console.error('Failed to check Microsoft connection:', error);
+    // On error, don't change local storage - just return false
     return false;
   }
 };
@@ -136,33 +145,54 @@ export const getMicrosoftModalShown = async (): Promise<boolean> => {
 };
 
 export const fetchDashboardScores = async () => {
-  const deviceId = await getOrCreateDeviceId();
-  const base = 'http://localhost:5000';
-  const url = `${base}/dashboard/scores?device_id=${encodeURIComponent(deviceId)}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('Failed to fetch dashboard scores');
-  return res.json() as Promise<{
-    work_stress: {
-      score: number;
-      level: string;
-      trend: 'up' | 'down' | 'stable';
-    };
-    email_activity: {
-      score: number;
-      count: number;
-      after_hours: number;
-    };
-    calendar_busyness: {
-      score: number;
-      meeting_hours: number;
-      back_to_back_meetings: number;
-      early_morning_meetings: number;
-    };
-    overall_productivity: {
-      score: number;
-      level: string;
-    };
-    period: string;
-    last_updated: string;
-  }>;
+  try {
+    const deviceId = await getOrCreateDeviceId();
+    const base = 'http://localhost:5000';
+    const url = `${base}/dashboard/scores?device_id=${encodeURIComponent(deviceId)}`;
+    
+    console.log(`🔍 DEBUG: Fetching dashboard scores from: ${url}`);
+    
+    const res = await fetch(url);
+    
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`❌ DEBUG: Dashboard scores fetch failed: ${res.status} - ${errorText}`);
+      
+      // Don't automatically disconnect on 401 - let user manually disconnect
+      // This prevents the connections tab from showing disconnected when app reopens
+      
+      throw new Error(`Failed to fetch dashboard scores: ${res.status} - ${errorText}`);
+    }
+    
+    const data = await res.json();
+    console.log(`✅ DEBUG: Dashboard scores fetched successfully:`, data);
+    
+    return data as Promise<{
+      work_stress: {
+        score: number;
+        level: string;
+        trend: 'up' | 'down' | 'stable';
+      };
+      email_activity: {
+        score: number;
+        count: number;
+        after_hours: number;
+      };
+      calendar_busyness: {
+        score: number;
+        meeting_hours: number;
+        back_to_back_meetings: number;
+        early_morning_meetings: number;
+      };
+      overall_productivity: {
+        score: number;
+        level: string;
+      };
+      period: string;
+      last_updated: string;
+    }>;
+  } catch (error) {
+    console.error(`❌ DEBUG: Error in fetchDashboardScores:`, error);
+    throw error;
+  }
 };

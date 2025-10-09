@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { ConnectionCard } from '@/components/ConnectionCard';
 import { Plus, Smartphone, Watch, Calendar, Activity, Headphones, Phone, Moon, Mail, LucideProps } from 'lucide-react-native';
-import { handleMicrosoftLogin, fetchMicrosoftMe, getMicrosoftConnectionStatus, setMicrosoftConnectionStatus } from '@/services/microsoftPermission';
+import { handleMicrosoftLogin, fetchMicrosoftMe, getMicrosoftConnectionStatus, setMicrosoftConnectionStatus, checkMicrosoftConnection } from '@/services/microsoftPermission';
 import { router } from 'expo-router';
 
 // STEP 3: Import the function from its new location
@@ -99,8 +99,8 @@ export default function ConnectionsScreen() {
 
     // Function to check which permission have been granted
     const syncPermissions = async () => {
-      // Check Microsoft connection status
-      const microsoftConnected = await getMicrosoftConnectionStatus();
+      // Check Microsoft connection status - check actual backend status like other connections
+      const microsoftConnected = await checkMicrosoftConnection();
       
       if (Platform.OS === 'android') {
         // Check call log permission
@@ -166,11 +166,14 @@ export default function ConnectionsScreen() {
 
   const toggleConnection = async (id: string) => {
     if (id === '1') {
-      const isConnected = connections.find(c => c.id === '1')?.connected;
-      if (!isConnected) {
+      // Check current Microsoft connection status (like other connections do)
+      const isCurrentlyConnected = await checkMicrosoftConnection();
+      
+      if (!isCurrentlyConnected) {
+        // Not connected - try to connect
         const ok = await handleMicrosoftLogin();
         if (ok) {
-          // Update both local state and shared storage
+          // Update local state and shared storage
           setConnections(prev => prev.map(c => c.id === '1' ? { ...c, connected: true } : c));
           await setMicrosoftConnectionStatus(true);
           try {
@@ -179,7 +182,7 @@ export default function ConnectionsScreen() {
           } catch {}
         }
       } else {
-        // For simplicity, just mark disconnected locally and in shared storage
+        // Currently connected - disconnect (like other connections open settings)
         setConnections(prev => prev.map(c => c.id === '1' ? { ...c, connected: false } : c));
         await setMicrosoftConnectionStatus(false);
         setMsProfileName(null);
