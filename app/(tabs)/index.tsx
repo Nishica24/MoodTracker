@@ -277,40 +277,40 @@ export default function DashboardScreen() {
   }, []);
 
   // --- NEW FUNCTION --- Fetch user scores from database
-  const fetchUserScoresFromDB = async () => {
-    if (!user?.id) {
-      console.log('🔍 DEBUG: No user ID available for fetching scores');
-      return null;
-    }
-
-    try {
-      console.log(`🔍 DEBUG: Fetching user scores for user_id=${user.id}`);
-      const response = await fetch(`http://localhost:5000/api/user-scores/${user.id}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
-
-      if (!response.ok) {
-        console.error(`❌ DEBUG: Failed to fetch user scores: ${response.status}`);
+    const fetchUserScoresFromDB = async () => {
+      // Return null if there is no user ID available
+      if (!user?.id) {
+        console.log('🔍 DEBUG: No user ID available for fetching scores');
         return null;
       }
 
-      const result = await response.json();
-      console.log(`🔍 DEBUG: User scores from DB:`, result);
+      try {
+        console.log(`🔍 DEBUG: Fetching user scores for user_id=${user.id}`);
+        const response = await fetch(`http://localhost:5000/api/user-scores/${user.id}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
 
-      // Get today's score
-      const today = new Date().toISOString().split('T')[0];
-      const todayScore = result.scores?.find((score: any) => score.date === today);
+        // Handle server errors or unsuccessful responses
+        if (!response.ok) {
+          console.error(`❌ DEBUG: Failed to fetch user scores: ${response.status}`);
+          return null;
+        }
 
-      console.log(`🔍 DEBUG: Today's score:`, todayScore);
-      return todayScore;
-    } catch (error) {
-      console.error('❌ DEBUG: Error fetching user scores:', error);
-      return null;
-    }
-  };
+        const result = await response.json();
+        console.log(`🔍 DEBUG: User scores from DB:`, result);
+
+        // Return the entire JSON object from the API.
+        // The calling function will be responsible for processing this data.
+        return result;
+
+      } catch (error) {
+        console.error('❌ DEBUG: Error fetching user scores:', error);
+        return null;
+      }
+    };
 
   // This useEffect handles the initial data loading and call log processing
   useEffect(() => {
@@ -328,15 +328,22 @@ export default function DashboardScreen() {
         // If no data from params (returning user), fetch from database
         if (!moodData && user?.id) {
           console.log('🔍 DEBUG: No params data, fetching from database');
-          const dbScore = await fetchUserScoresFromDB();
-          if (dbScore) {
+          const dbResult = await fetchUserScoresFromDB(); // This now returns the full {scores: [...]} object
+
+          // Check if the API returned a valid result with at least one score
+          if (dbResult && dbResult.scores && dbResult.scores.length > 0) {
+
+            // Your backend already sorts by date, so the first item is the most recent score.
+            const mostRecentScore = dbResult.scores[0];
+
             moodData = {
-              mood: 'Neutral', // Default mood name
-              mood_level: dbScore.breakdown?.moodLevel || 5,
-              emoji: '😊', // Default emoji
-              timestamp: dbScore.updatedAt
+              // Use the data from the most recent score
+              mood: mostRecentScore.breakdown?.moodName || 'Neutral',
+              mood_level: mostRecentScore.breakdown?.moodLevel || 5,
+              emoji: mostRecentScore.breakdown?.emoji || '😊',
+              timestamp: mostRecentScore.updatedAt
             };
-            console.log(`🔍 DEBUG: Using DB mood data:`, moodData);
+            console.log(`🔍 DEBUG: Using most recent DB mood data from ${mostRecentScore.date}:`, moodData);
           }
         }
 

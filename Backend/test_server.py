@@ -1300,12 +1300,18 @@ def get_user_scores(user_id):
                 "$gte": start_date.isoformat(),
                 "$lte": end_date.isoformat()
             }
-        }).sort("date", 1))
-        
-        return jsonify({
+        }).sort("date", -1))
+
+
+
+        data = jsonify({
             "scores": scores,
             "period": "week"
         }), 200
+
+        print("User score data: ", data)
+
+        return data
         
     except Exception as e:
         logger.error(f"Error fetching user scores: {str(e)}")
