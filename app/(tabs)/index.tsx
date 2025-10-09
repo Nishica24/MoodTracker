@@ -718,11 +718,9 @@ export default function DashboardScreen() {
 
   // --- AUTO REFRESH ALL SCORES EVERY 5 MINUTES ---
   useEffect(() => {
-    if (microsoftConnected) {
-      const interval = setInterval(refreshAllScores, 5 * 60 * 1000); // 5 minutes
-      return () => clearInterval(interval);
-    }
-  }, [microsoftConnected]);
+    const interval = setInterval(refreshAllScores, 5 * 60 * 1000); // 5 minutes
+    return () => clearInterval(interval);
+  }, []);
 
   // --- HANDLE SCREEN TIME MODAL DISMISSAL ---
   useEffect(() => {
