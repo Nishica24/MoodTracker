@@ -789,8 +789,8 @@ export default function DashboardScreen() {
     trend: 'up' | 'stable' | 'down';
     onPress?: () => void;
   }> => {
-    if (moodScores.length === 0) return [];
-    
+    // Always return wellness stats, even if moodScores is empty
+    // This ensures the wellness stats section is always visible
     return [
       {
         icon: Heart,
