@@ -17,7 +17,8 @@ interface ChartData {
 // --- IMPORTANT ---
 // If running on an Android emulator with a local server, use 'http://10.0.2.2:5000'.
 // If on a physical device over USB, use adb reverse and 'http://localhost:5000'.
-const API_BASE_URL = 'http://localhost:5000';
+// For hosted backend, use 'https://moodtracker-aaj4.onrender.com'
+const API_BASE_URL = 'https://moodtracker-aaj4.onrender.com';
 
 export function AnalyticsChart({ period, userId }: AnalyticsChartProps) {
   const [chartData, setChartData] = useState<ChartData | null>(null);

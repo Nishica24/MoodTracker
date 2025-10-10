@@ -286,7 +286,7 @@ export default function DashboardScreen() {
 
       try {
         console.log(`🔍 DEBUG: Fetching user scores for user_id=${user.id}`);
-        const response = await fetch(`http://localhost:5000/api/user-scores/${user.id}`, {
+        const response = await fetch(`https://moodtracker-aaj4.onrender.com/api/user-scores/${user.id}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
