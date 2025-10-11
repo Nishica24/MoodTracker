@@ -129,11 +129,19 @@ export const getHistoricalSocialScores = async (period: string): Promise<Array<{
         cutoffDate.setDate(cutoffDate.getDate() - daysToFetch);
         const cutoffDateString = cutoffDate.toISOString().split('T')[0];
 
-        // Filter history to the requested period
+        // Filter history to the requested period and deduplicate by date
         const filteredHistory = history.filter(day => day.date >= cutoffDateString);
+        
+        // Deduplicate by date - keep only the first occurrence of each date
+        const uniqueHistory = filteredHistory.reduce((acc, day) => {
+            if (!acc.find(d => d.date === day.date)) {
+                acc.push(day);
+            }
+            return acc;
+        }, [] as DailySummary[]);
 
         // Calculate social scores for each day
-        const socialScores = filteredHistory.map(day => {
+        const socialScores = uniqueHistory.map(day => {
             let score = 5.0; // Start with neutral score
 
             // Apply the same scoring logic as calculateSocialScore
@@ -166,8 +174,15 @@ export const getHistoricalSocialScores = async (period: string): Promise<Array<{
             };
         });
 
-        // Sort by date (oldest first for chart display)
-        return socialScores.sort((a, b) => a.date.localeCompare(b.date));
+        // Final deduplication and sort by date (oldest first for chart display)
+        const finalScores = socialScores.reduce((acc, item) => {
+          if (!acc.find(s => s.date === item.date)) {
+            acc.push(item);
+          }
+          return acc;
+        }, [] as Array<{date: string, score: number}>);
+        
+        return finalScores.sort((a, b) => a.date.localeCompare(b.date));
 
     } catch (error) {
         console.error('Failed to fetch historical social scores:', error);

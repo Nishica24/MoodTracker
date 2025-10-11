@@ -32,9 +32,16 @@ export function SocialHealthChart({ period }: SocialHealthChartProps) {
           setDays(fallbackDays);
           setAverage(8.1);
         } else {
-          // Use real data
-          const scores = historicalScores.map(item => item.score);
-          const dates = historicalScores.map(item => {
+          // Use real data - deduplicate by date first
+          const uniqueScores = historicalScores.reduce((acc, item) => {
+            if (!acc.find(s => s.date === item.date)) {
+              acc.push(item);
+            }
+            return acc;
+          }, [] as Array<{date: string, score: number}>);
+          
+          const scores = uniqueScores.map(item => item.score);
+          const dates = uniqueScores.map(item => {
             const date = new Date(item.date);
             return date.toLocaleDateString('en-US', { weekday: 'short' });
           });
@@ -128,7 +135,7 @@ export function SocialHealthChart({ period }: SocialHealthChartProps) {
       <View style={styles.chartContainer}>
         <View style={styles.chart}>
           {socialData.length > 0 ? socialData.map((value, index) => (
-            <View key={index} style={styles.barContainer}>
+            <View key={`${days[index]}-${value}-${index}`} style={styles.barContainer}>
               <Text style={styles.scoreLabel}>{value.toFixed(1)}</Text>
               <View
                 style={[
