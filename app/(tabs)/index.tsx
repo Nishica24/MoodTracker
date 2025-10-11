@@ -716,9 +716,9 @@ export default function DashboardScreen() {
     }
   };
 
-  // --- AUTO REFRESH ALL SCORES EVERY 5 MINUTES ---
+  // --- AUTO REFRESH ALL SCORES EVERY 30 MINUTES ---
   useEffect(() => {
-    const interval = setInterval(refreshAllScores, 5 * 60 * 1000); // 5 minutes
+    const interval = setInterval(refreshAllScores, 30 * 60 * 1000); // 30 minutes
     return () => clearInterval(interval);
   }, []);
 
