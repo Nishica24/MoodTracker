@@ -1643,7 +1643,8 @@ def debug_timezone():
             "same": user_date == utc_now.date().isoformat()
         },
         "available_timezones": [
-            "UTC", "America/New_York", "Europe/London", 
+            "UTC", "America/New_York", "America/Los_Angeles",
+            "Europe/London", "Europe/Berlin", 
             "Asia/Kolkata", "Asia/Tokyo", "Australia/Sydney"
         ]
     })
