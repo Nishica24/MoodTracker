@@ -21,17 +21,6 @@ export function ScreenTimeChart({ period, screenTimeData: propScreenTimeData, ap
 
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-  // Fallback data for when no real data is available
-  const fallbackData = [
-    { date: '2024-01-01', screenTimeHours: 4.2, screenTimeMs: 15120000 },
-    { date: '2024-01-02', screenTimeHours: 5.1, screenTimeMs: 18360000 },
-    { date: '2024-01-03', screenTimeHours: 3.8, screenTimeMs: 13680000 },
-    { date: '2024-01-04', screenTimeHours: 6.2, screenTimeMs: 22320000 },
-    { date: '2024-01-05', screenTimeHours: 4.9, screenTimeMs: 17640000 },
-    { date: '2024-01-06', screenTimeHours: 7.1, screenTimeMs: 25560000 },
-    { date: '2024-01-07', screenTimeHours: 5.5, screenTimeMs: 19800000 },
-  ];
-
   useEffect(() => {
     loadScreenTimeData();
   }, [period]);
@@ -45,27 +34,10 @@ export function ScreenTimeChart({ period, screenTimeData: propScreenTimeData, ap
       const permission = await ScreenTimeService.checkPermission();
       setHasPermission(permission);
 
-      // Always show fallback data for testing/demo purposes
-      const fallbackData = [
-        { date: '2024-01-01', screenTimeHours: 4.2, screenTimeMs: 15120000 },
-        { date: '2024-01-02', screenTimeHours: 5.1, screenTimeMs: 18360000 },
-        { date: '2024-01-03', screenTimeHours: 3.8, screenTimeMs: 13680000 },
-        { date: '2024-01-04', screenTimeHours: 6.2, screenTimeMs: 22320000 },
-        { date: '2024-01-05', screenTimeHours: 4.9, screenTimeMs: 17640000 },
-        { date: '2024-01-06', screenTimeHours: 7.1, screenTimeMs: 25560000 },
-        { date: '2024-01-07', screenTimeHours: 5.5, screenTimeMs: 19800000 },
-      ];
-      const fallbackAppData = [
-        { packageName: 'com.whatsapp', usageHours: 2.1, usageMs: 7560000 },
-        { packageName: 'com.instagram', usageHours: 1.8, usageMs: 6480000 },
-        { packageName: 'com.youtube', usageHours: 1.2, usageMs: 4320000 },
-      ];
-
       if (!permission) {
-        // Use fallback data when permission is not granted
-        setScreenTimeData(fallbackData);
-        setAppUsageData(fallbackAppData);
-        setHasPermission(true); // Override for demo purposes
+        // Don't use fallback data - show permission request instead
+        setScreenTimeData([]);
+        setAppUsageData([]);
         return;
       }
 
@@ -84,32 +56,18 @@ export function ScreenTimeChart({ period, screenTimeData: propScreenTimeData, ap
           setScreenTimeData(screenData);
           setAppUsageData(appData);
         } catch (fetchError) {
-          // If fetching fails, use fallback data
-          console.log('Using fallback data due to fetch error:', fetchError);
-          setScreenTimeData(fallbackData);
-          setAppUsageData(fallbackAppData);
+          // If fetching fails, show error instead of fallback data
+          console.error('Failed to fetch screen time data:', fetchError);
+          setError('Failed to load screen time data. Please check permissions.');
+          setScreenTimeData([]);
+          setAppUsageData([]);
         }
       }
     } catch (err: any) {
       console.error('Error loading screen time data:', err);
-      // Use fallback data on any error
-      const fallbackData = [
-        { date: '2024-01-01', screenTimeHours: 4.2, screenTimeMs: 15120000 },
-        { date: '2024-01-02', screenTimeHours: 5.1, screenTimeMs: 18360000 },
-        { date: '2024-01-03', screenTimeHours: 3.8, screenTimeMs: 13680000 },
-        { date: '2024-01-04', screenTimeHours: 6.2, screenTimeMs: 22320000 },
-        { date: '2024-01-05', screenTimeHours: 4.9, screenTimeMs: 17640000 },
-        { date: '2024-01-06', screenTimeHours: 7.1, screenTimeMs: 25560000 },
-        { date: '2024-01-07', screenTimeHours: 5.5, screenTimeMs: 19800000 },
-      ];
-      const fallbackAppData = [
-        { packageName: 'com.whatsapp', usageHours: 2.1, usageMs: 7560000 },
-        { packageName: 'com.instagram', usageHours: 1.8, usageMs: 6480000 },
-        { packageName: 'com.youtube', usageHours: 1.2, usageMs: 4320000 },
-      ];
-      setScreenTimeData(fallbackData);
-      setAppUsageData(fallbackAppData);
-      setHasPermission(true);
+      setError('Error loading screen time data. Please try again.');
+      setScreenTimeData([]);
+      setAppUsageData([]);
     } finally {
       setIsLoading(false);
     }
@@ -128,13 +86,14 @@ export function ScreenTimeChart({ period, screenTimeData: propScreenTimeData, ap
     try {
       setGeneratingReport(true);
       
-      // Use the same data source as the chart
-      const dataToUse = screenTimeData.length > 0 ? screenTimeData : fallbackData;
-      const appDataToUse = appUsageData.length > 0 ? appUsageData : [
-        { packageName: 'com.whatsapp', usageHours: 2.1, usageMs: 7560000 },
-        { packageName: 'com.instagram', usageHours: 1.8, usageMs: 6480000 },
-        { packageName: 'com.youtube', usageHours: 1.2, usageMs: 4320000 },
-      ];
+      // Use the real data only
+      const dataToUse = screenTimeData;
+      const appDataToUse = appUsageData;
+      
+      if (dataToUse.length === 0) {
+        console.warn('No screen time data available for report generation');
+        return;
+      }
       
       // Format the data for the report
       const formattedData = formatScreenTimeData(
@@ -186,7 +145,72 @@ export function ScreenTimeChart({ period, screenTimeData: propScreenTimeData, ap
     );
   }
 
-  // Always show the chart with fallback data
+  // Show permission request if no permission
+  if (hasPermission === false) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.titleContainer}>
+            <Smartphone size={20} color="#06B6D4" />
+            <Text style={styles.title}>Daily Screen Time</Text>
+          </View>
+        </View>
+        <View style={styles.errorContainer}>
+          <AlertCircle size={48} color="#EF4444" />
+          <Text style={styles.errorText}>
+            Screen time tracking requires usage access permission.
+          </Text>
+          <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
+            <Text style={styles.permissionButtonText}>Grant Permission</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // Show error if there's an error
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.titleContainer}>
+            <Smartphone size={20} color="#06B6D4" />
+            <Text style={styles.title}>Daily Screen Time</Text>
+          </View>
+        </View>
+        <View style={styles.errorContainer}>
+          <AlertCircle size={48} color="#EF4444" />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.permissionButton} onPress={loadScreenTimeData}>
+            <Text style={styles.permissionButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // Show empty state if no data
+  if (screenTimeData.length === 0) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.titleContainer}>
+            <Smartphone size={20} color="#06B6D4" />
+            <Text style={styles.title}>Daily Screen Time</Text>
+          </View>
+        </View>
+        <View style={styles.errorContainer}>
+          <Smartphone size={48} color="#6B7280" />
+          <Text style={styles.errorText}>
+            No screen time data available. Make sure you have granted usage access permission.
+          </Text>
+          <TouchableOpacity style={styles.permissionButton} onPress={loadScreenTimeData}>
+            <Text style={styles.permissionButtonText}>Refresh</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   const toHours = (d: ScreenTimeData) => {
     if (typeof d.screenTimeHours === 'number') return d.screenTimeHours;
@@ -204,8 +228,8 @@ export function ScreenTimeChart({ period, screenTimeData: propScreenTimeData, ap
     return `${h}h ${m}m`;
   };
 
-  // Use fallback data if screenTimeData is empty
-  const dataToUse = screenTimeData.length > 0 ? screenTimeData : fallbackData;
+  // Use real data only - no fallback data
+  const dataToUse = screenTimeData;
   const screenTimeHours = dataToUse.map(toHours);
   const maxValue = Math.max(...screenTimeHours, 1); // Ensure minimum value for chart
   const chartHeight = 120;
@@ -219,8 +243,10 @@ export function ScreenTimeChart({ period, screenTimeData: propScreenTimeData, ap
     dataToUseLength: dataToUse.length,
     screenTimeHours,
     average,
-    isLoading
+    isLoading,
+    hasPermission
   });
+  
   const labels = dataToUse.map(d => {
     try {
       const dt = new Date(d.date);

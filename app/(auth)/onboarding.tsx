@@ -162,7 +162,7 @@ export default function OnboardingScreen() {
         await saveUserProfile(formData);
 
         // IMPORTANT: change 10.0.2.2 to your IP if testing on device
-        const response = await fetch('https://moodtracker-9ygs.onrender.com/generate-mood-score', {
+        const response = await fetch('http://localhost:5000/generate-mood-score', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData),

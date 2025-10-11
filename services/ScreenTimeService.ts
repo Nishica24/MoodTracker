@@ -7,6 +7,11 @@ const log = (...args: any[]) => console.log('[ScreenTimeService]', ...args);
 const warn = (...args: any[]) => console.warn('[ScreenTimeService]', ...args);
 const error = (...args: any[]) => console.error('[ScreenTimeService]', ...args);
 
+// Cache for screen time data to prevent excessive API calls
+let screenTimeCache: { data: ScreenTimeData[]; timestamp: number } | null = null;
+let appUsageCache: { data: AppUsageData[]; timestamp: number } | null = null;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
+
 // Check if the native module is available
 const isScreenTimeModuleAvailable = () => {
   const available = ScreenTimeModule && typeof ScreenTimeModule.checkPermission === 'function';
@@ -75,13 +80,24 @@ const getScreenTimeData = async (): Promise<ScreenTimeData[]> => {
   }
 
   try {
-    log('getScreenTimeData: invoking native method.');
+    // Check cache first
+    const now = Date.now();
+    if (screenTimeCache && (now - screenTimeCache.timestamp) < CACHE_DURATION) {
+      log('getScreenTimeData: returning cached data');
+      return screenTimeCache.data;
+    }
+
+    log('getScreenTimeData: invoking native method (cache miss or expired).');
     const data = await ScreenTimeModule.getScreenTimeData();
     log('getScreenTimeData: output summary:', {
       type: Array.isArray(data) ? 'array' : typeof data,
       length: Array.isArray(data) ? data.length : undefined,
       sample: Array.isArray(data) && data.length > 0 ? data[0] : null,
     });
+
+    // Cache the result
+    screenTimeCache = { data, timestamp: now };
+    
     return data;
   } catch (err) {
     error('Error getting screen time data:', err);
@@ -95,13 +111,24 @@ const getAppUsageData = async (): Promise<AppUsageData[]> => {
   }
 
   try {
-    log('getAppUsageData: invoking native method (no inputs).');
+    // Check cache first
+    const now = Date.now();
+    if (appUsageCache && (now - appUsageCache.timestamp) < CACHE_DURATION) {
+      log('getAppUsageData: returning cached data');
+      return appUsageCache.data;
+    }
+
+    log('getAppUsageData: invoking native method (cache miss or expired).');
     const data = await ScreenTimeModule.getAppUsageData();
     log('getAppUsageData: output summary:', {
       type: Array.isArray(data) ? 'array' : typeof data,
       length: Array.isArray(data) ? data.length : undefined,
       top: Array.isArray(data) && data.length > 0 ? data[0] : null,
     });
+
+    // Cache the result
+    appUsageCache = { data, timestamp: now };
+    
     return data;
   } catch (err) {
     error('Error getting app usage data:', err);
@@ -199,4 +226,9 @@ export const ScreenTimeService = {
   calculateScreenTimeTrends,
   generateInsights,
   isAvailable: isScreenTimeModuleAvailable,
+  clearCache: () => {
+    screenTimeCache = null;
+    appUsageCache = null;
+    log('Screen time cache cleared');
+  },
 };
