@@ -3,7 +3,7 @@ import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, Ale
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatsCard } from '@/components/StatsCard';
 import { QuickActions } from '@/components/QuickActions';
-import { Heart, Zap, Moon, Smartphone, DollarSign, LucideIcon, Plus, TrendingUp, RefreshCw, Link } from 'lucide-react-native';
+import { Heart, Zap, Moon, Smartphone, LucideIcon, Plus, TrendingUp, RefreshCw, Link } from 'lucide-react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '@/hooks/useAuth';
@@ -756,15 +756,6 @@ export default function DashboardScreen() {
         color: '#EF4444',
         trend: socialTrend,
         onPress: () => router.push('./social-health')
-      },
-      {
-        icon: DollarSign,
-        title: 'Spending Wellness',
-        value: '$247',
-        subtitle: 'This week',
-        color: '#10B981',
-        trend: 'stable',
-        onPress: () => router.push('./spending-wellness')
       },
       {
         icon: Zap,
