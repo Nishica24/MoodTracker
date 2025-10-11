@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'https://moodtracker-aaj4.onrender.com/api';
+const API_BASE_URL = 'https://moodtracker-9ygs.onrender.com/api';
 
 export interface User {
   id: string;
