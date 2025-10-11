@@ -247,6 +247,7 @@ class AuthService {
         },
         body: JSON.stringify({
           user_id: this.user.id,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, // Get user's timezone
           ...scoreData
         })
       });

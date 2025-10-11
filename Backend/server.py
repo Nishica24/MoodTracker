@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, redirect, session, url_for
 from flask_cors import CORS
 import logging
 from datetime import datetime, timezone, timedelta, time
+import pytz
 from flask_pymongo import PyMongo
 from collections import defaultdict
 from datetime import timedelta
@@ -39,6 +40,28 @@ db = mongo.db
 
 # ---------------- Authentication Service ----------------
 auth_service = AuthService()
+
+# ---------------- Timezone Configuration ----------------
+def get_user_timezone(user_timezone=None):
+    """Get user's timezone or fallback to UTC"""
+    if user_timezone and user_timezone in pytz.all_timezones:
+        try:
+            return pytz.timezone(user_timezone)
+        except:
+            pass
+    # Fallback to UTC if no valid timezone provided
+    return pytz.timezone('UTC')
+
+def get_user_date(user_timezone=None):
+    """Get current date in user's timezone"""
+    tz = get_user_timezone(user_timezone)
+    local_time = datetime.now(tz)
+    return local_time.date().isoformat()
+
+def get_user_datetime(user_timezone=None):
+    """Get current datetime in user's timezone"""
+    tz = get_user_timezone(user_timezone)
+    return datetime.now(tz)
 
 # ---------------- In-memory store for Microsoft login state ----------------
 ms_tokens: Dict[str, dict] = {}
@@ -866,7 +889,7 @@ def generate_mood_score():
         # Store baseline mood score in new format
         try:
             from bson import ObjectId
-            today = datetime.now(timezone.utc).date().isoformat()
+            today = get_local_date()  # Use local timezone
             
             logger.info(f"🔍 DEBUG: Storing score for user_id={user_id}, date={today}")
             
@@ -1231,8 +1254,10 @@ def update_user_score():
     try:
         data = request.json
         user_id = data.get('user_id', '')
+        user_timezone = data.get('timezone', None)  # Get user's timezone
         
         logger.info(f"🔍 DEBUG: update-user-score called with user_id={user_id}")
+        logger.info(f"🔍 DEBUG: User timezone: {user_timezone}")
         logger.info(f"🔍 DEBUG: Score data received: {data}")
         
         if not user_id:
@@ -1240,9 +1265,10 @@ def update_user_score():
             return jsonify({"error": "User ID is required"}), 400
         
         from bson import ObjectId
-        today = datetime.now(timezone.utc).date().isoformat()
+        today = get_user_date(user_timezone)  # Use user's timezone
         
         logger.info(f"🔍 DEBUG: Looking for score on date={today}")
+        logger.info(f"🔍 DEBUG: Current user time: {get_user_datetime(user_timezone).isoformat()}")
         
         # Get current score document
         existing_score = db.user_scores.find_one({
@@ -1253,11 +1279,54 @@ def update_user_score():
         logger.info(f"🔍 DEBUG: Existing score found: {existing_score}")
         
         if not existing_score:
-            logger.error("❌ DEBUG: No baseline score found for today")
-            return jsonify({"error": "No baseline score found. Complete onboarding first."}), 400
+            logger.info("🔍 DEBUG: No score found for today, looking for most recent score")
+            # Find the most recent score from previous days
+            most_recent_score = db.user_scores.find_one(
+                {"userId": ObjectId(user_id)},
+                sort=[("date", -1)]  # Sort by date descending to get most recent
+            )
+            
+            if most_recent_score:
+                logger.info(f"🔍 DEBUG: Found most recent score from {most_recent_score['date']}")
+                # Create a new score for today based on the most recent score
+                baseline_score = {
+                    "userId": ObjectId(user_id),
+                    "date": today,
+                    "overallScore": most_recent_score.get("overallScore", 5.0),
+                    "breakdown": most_recent_score.get("breakdown", {
+                        "moodLevel": 5.0,
+                        "socialScore": None,
+                        "workStressScore": None,
+                        "screenTimePenalty": None,
+                        "interactionPenalty": None
+                    }).copy(),  # Copy the breakdown from most recent score
+                    "updatedAt": get_user_datetime(user_timezone)
+                }
+                logger.info(f"🔍 DEBUG: Creating score for today based on most recent: {baseline_score}")
+            else:
+                logger.info("🔍 DEBUG: No previous scores found, creating default baseline")
+                # If no previous scores exist, create a default baseline
+                baseline_score = {
+                    "userId": ObjectId(user_id),
+                    "date": today,
+                    "overallScore": 5.0,  # Default neutral score
+                    "breakdown": {
+                        "moodLevel": 5.0,  # Default neutral mood
+                        "socialScore": None,
+                        "workStressScore": None,
+                        "screenTimePenalty": None,
+                        "interactionPenalty": None
+                    },
+                    "updatedAt": get_user_datetime(user_timezone)
+                }
+                logger.info(f"🔍 DEBUG: Creating default baseline score: {baseline_score}")
+            
+            insert_result = db.user_scores.insert_one(baseline_score)
+            logger.info(f"🔍 DEBUG: Score created with ID: {insert_result.inserted_id}")
+            existing_score = baseline_score
         
         # Update with provided metrics
-        update_data = {"updatedAt": datetime.now(timezone.utc)}
+        update_data = {"updatedAt": get_user_datetime(user_timezone)}
         
         if 'socialScore' in data:
             update_data["breakdown.socialScore"] = float(data['socialScore'])
@@ -1552,6 +1621,32 @@ def get_dashboard_scores():
         logger.error(f"Error computing dashboard scores: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
 
+
+@app.route('/debug-timezone', methods=['GET'])
+def debug_timezone():
+    """Debug endpoint to check timezone settings"""
+    utc_now = datetime.now(timezone.utc)
+    user_tz = request.args.get('timezone', 'UTC')
+    
+    user_now = get_user_datetime(user_tz)
+    user_date = get_user_date(user_tz)
+    
+    return jsonify({
+        "utc_time": utc_now.isoformat(),
+        "user_timezone": user_tz,
+        "user_time": user_now.isoformat(),
+        "user_date": user_date,
+        "utc_date": utc_now.date().isoformat(),
+        "date_comparison": {
+            "user_date": user_date,
+            "utc_date": utc_now.date().isoformat(),
+            "same": user_date == utc_now.date().isoformat()
+        },
+        "available_timezones": [
+            "UTC", "America/New_York", "Europe/London", 
+            "Asia/Kolkata", "Asia/Tokyo", "Australia/Sydney"
+        ]
+    })
 
 # ---------------- Run ----------------
 if __name__ == "__main__":
