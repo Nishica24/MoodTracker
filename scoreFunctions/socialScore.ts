@@ -13,6 +13,9 @@ export const calculateSocialScore = async (): Promise<number> => {
         const baselineJson = await AsyncStorage.getItem(BASELINE_KEY);
         const historyJson = await AsyncStorage.getItem(HISTORY_KEY);
 
+        console.log('🔍 DEBUG: Social score calculation - baseline exists:', !!baselineJson);
+        console.log('🔍 DEBUG: Social score calculation - history exists:', !!historyJson);
+
         if (!baselineJson || !historyJson) {
             console.log('Baseline or history not found, returning neutral score.');
             return 5.0; // Return neutral score
@@ -21,12 +24,16 @@ export const calculateSocialScore = async (): Promise<number> => {
         const baseline: Baseline = JSON.parse(baselineJson);
         const history: DailySummary[] = JSON.parse(historyJson);
 
+        console.log('🔍 DEBUG: Baseline data:', baseline);
+        console.log('🔍 DEBUG: History length:', history.length);
+
         // Ensure history is not empty and today's summary is present
         if (history.length === 0) {
             console.log('History is empty, returning neutral score.');
             return 5.0;
         }
         const todaySummary = history[0];
+        console.log('🔍 DEBUG: Today summary:', todaySummary);
 
         // --- Scoring Logic ---
 
@@ -57,13 +64,27 @@ export const calculateSocialScore = async (): Promise<number> => {
         const rejectedDiff = todaySummary.rejectedCount - baseline.avgRejected;
         score -= (rejectedDiff * 1.5);
 
+        console.log('🔍 DEBUG: Raw score calculation:', {
+            outgoingDiff, incomingDiff, durationDiff, uniqueContactsDiff, missedDiff, rejectedDiff, rawScore: score
+        });
+
         // --- Step 2: Estimate the User's Plausible Score Range ---
         const bestCase = 5.0 + (baseline.avgOutgoing * 0.75) + (baseline.avgIncoming * 0.4) + (baseline.avgUniqueContacts * 0.5);
         const worstCase = 5.0 - (baseline.avgOutgoing * 0.75) - (baseline.avgMissed * 1.0) - (baseline.avgRejected * 1.5);
 
+        console.log('🔍 DEBUG: Score range:', { bestCase, worstCase });
+
         // --- Step 3: Normalize the Raw Score ---
-        // CORRECTED: Changed 'rawScore' to the correct variable 'score'
-        const finalScore = normalize(score, worstCase, bestCase);
+        // Handle edge case where bestCase and worstCase are the same (no variation in baseline)
+        let finalScore;
+        if (Math.abs(bestCase - worstCase) < 0.1) {
+            // If there's no meaningful variation in baseline, use a simple mapping
+            // Map raw score to 0-10 range more directly
+            finalScore = Math.max(0, Math.min(10, score));
+            console.log('🔍 DEBUG: Using direct mapping due to no baseline variation');
+        } else {
+            finalScore = normalize(score, worstCase, bestCase);
+        }
 
         console.log(`Raw Score: ${score.toFixed(2)}, Normalized Score: ${finalScore.toFixed(1)}`);
         return parseFloat(finalScore.toFixed(1));

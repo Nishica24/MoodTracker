@@ -88,7 +88,28 @@ export const checkMicrosoftConnection = async (): Promise<boolean> => {
   try {
     const deviceId = await getOrCreateDeviceId();
     const base = 'https://moodtracker-9ygs.onrender.com';
-    const res = await fetch(`${base}/connection-status?device_id=${encodeURIComponent(deviceId)}`);
+    const url = `${base}/connection-status?device_id=${encodeURIComponent(deviceId)}`;
+    
+    console.log(`🔍 DEBUG: Checking Microsoft connection at: ${url}`);
+    
+    const res = await fetch(url);
+    
+    // Check if response is ok
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`❌ DEBUG: Microsoft connection check failed with status ${res.status}: ${errorText}`);
+      return false;
+    }
+    
+    // Check content type before parsing JSON
+    const contentType = res.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const responseText = await res.text();
+      console.error(`❌ DEBUG: Expected JSON but got content-type: ${contentType}`);
+      console.error(`❌ DEBUG: Response body: ${responseText.substring(0, 200)}...`);
+      return false;
+    }
+    
     const json = await res.json();
     
     console.log(`🔍 DEBUG: Microsoft connection check result:`, json);
@@ -162,6 +183,15 @@ export const fetchDashboardScores = async () => {
       // This prevents the connections tab from showing disconnected when app reopens
       
       throw new Error(`Failed to fetch dashboard scores: ${res.status} - ${errorText}`);
+    }
+    
+    // Check content type before parsing JSON
+    const contentType = res.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const responseText = await res.text();
+      console.error(`❌ DEBUG: Expected JSON but got content-type: ${contentType}`);
+      console.error(`❌ DEBUG: Response body: ${responseText.substring(0, 200)}...`);
+      throw new Error(`Expected JSON response but got ${contentType}`);
     }
     
     const data = await res.json();

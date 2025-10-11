@@ -170,15 +170,55 @@ export const updateDailyHistory = async (): Promise<void> => {
   }
 };
 
-// --- Unchanged updateUserBaseline function ---
+// --- IMPROVED updateUserBaseline function ---
 const updateUserBaseline = async (): Promise<void> => {
     try {
         const historyJson = await AsyncStorage.getItem(HISTORY_KEY);
         const history: DailySummary[] = historyJson ? JSON.parse(historyJson) : [];
+        
+        console.log(`🔍 DEBUG: Updating baseline with ${history.length} days of data`);
+        
         if (history.length < MINIMUM_DAYS_FOR_BASELINE) {
             console.log(`Not enough data to update baseline. Need ${MINIMUM_DAYS_FOR_BASELINE}, have ${history.length}.`);
+            
+            // For new users with insufficient data, create a minimal baseline
+            if (history.length > 0) {
+                console.log('Creating minimal baseline for new user...');
+                const totals = history.reduce((acc, day) => {
+                    acc.outgoing += day.outgoingCount;
+                    acc.incoming += day.incomingCount;
+                    acc.missed += day.missedCount;
+                    acc.rejected += day.rejectedCount;
+                    acc.duration += day.avgDuration * (day.incomingCount + day.outgoingCount);
+                    acc.totalCalls += day.incomingCount + day.outgoingCount;
+                    acc.uniqueContacts += day.uniqueContacts;
+                    return acc;
+                }, { outgoing: 0, incoming: 0, missed: 0, rejected: 0, duration: 0, uniqueContacts: 0, totalCalls: 0 });
+                
+                const numDays = history.length;
+                const baseline: Baseline = {
+                    avgOutgoing: totals.outgoing / numDays,
+                    avgIncoming: totals.incoming / numDays,
+                    avgMissed: totals.missed / numDays,
+                    avgRejected: totals.rejected / numDays,
+                    avgDuration: totals.totalCalls > 0 ? totals.duration / totals.totalCalls : 0,
+                    avgUniqueContacts: totals.uniqueContacts / numDays,
+                };
+                
+                // Ensure minimum values to avoid division by zero in scoring
+                baseline.avgOutgoing = Math.max(0.1, baseline.avgOutgoing);
+                baseline.avgIncoming = Math.max(0.1, baseline.avgIncoming);
+                baseline.avgMissed = Math.max(0.1, baseline.avgMissed);
+                baseline.avgRejected = Math.max(0.1, baseline.avgRejected);
+                baseline.avgDuration = Math.max(30, baseline.avgDuration); // Minimum 30 seconds
+                baseline.avgUniqueContacts = Math.max(0.1, baseline.avgUniqueContacts);
+                
+                await AsyncStorage.setItem(BASELINE_KEY, JSON.stringify(baseline));
+                console.log('Minimal baseline created for new user:', baseline);
+            }
             return;
         }
+        
         const totals = history.reduce((acc, day) => {
             acc.outgoing += day.outgoingCount;
             acc.incoming += day.incomingCount;
@@ -189,6 +229,7 @@ const updateUserBaseline = async (): Promise<void> => {
             acc.uniqueContacts += day.uniqueContacts;
             return acc;
         }, { outgoing: 0, incoming: 0, missed: 0, rejected: 0, duration: 0, uniqueContacts: 0, totalCalls: 0 });
+        
         const numDays = history.length;
         const baseline: Baseline = {
             avgOutgoing: totals.outgoing / numDays,
@@ -198,6 +239,15 @@ const updateUserBaseline = async (): Promise<void> => {
             avgDuration: totals.totalCalls > 0 ? totals.duration / totals.totalCalls : 0,
             avgUniqueContacts: totals.uniqueContacts / numDays,
         };
+        
+        // Ensure minimum values to avoid division by zero in scoring
+        baseline.avgOutgoing = Math.max(0.1, baseline.avgOutgoing);
+        baseline.avgIncoming = Math.max(0.1, baseline.avgIncoming);
+        baseline.avgMissed = Math.max(0.1, baseline.avgMissed);
+        baseline.avgRejected = Math.max(0.1, baseline.avgRejected);
+        baseline.avgDuration = Math.max(30, baseline.avgDuration); // Minimum 30 seconds
+        baseline.avgUniqueContacts = Math.max(0.1, baseline.avgUniqueContacts);
+        
         await AsyncStorage.setItem(BASELINE_KEY, JSON.stringify(baseline));
         console.log('User baseline has been successfully updated.', baseline);
     } catch (error) {
