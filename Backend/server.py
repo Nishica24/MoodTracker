@@ -889,7 +889,7 @@ def generate_mood_score():
         # Store baseline mood score in new format
         try:
             from bson import ObjectId
-            today = get_local_date()  # Use local timezone
+            today = get_user_date()  # Use user timezone
             
             logger.info(f"🔍 DEBUG: Storing score for user_id={user_id}, date={today}")
             
