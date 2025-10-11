@@ -107,7 +107,7 @@ export const isWorkHours = (userProfile: UserProfile): boolean => {
  * @returns True if current day is a work day
  */
 export const isWorkDay = (userProfile: UserProfile): boolean => {
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'lowercase' });
   return userProfile.preferences.workDays?.includes(today) ?? true;
 };
 

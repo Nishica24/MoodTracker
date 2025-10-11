@@ -89,16 +89,7 @@ const processLogsByDay = (logs: CallLog.CallLog[]): DailySummary[] => {
       uniqueContacts: data.uniqueNumbers.size,
     });
   }
-  
-  // Deduplicate by date to ensure no duplicate entries
-  const uniqueSummaries = processedSummaries.reduce((acc, day) => {
-    if (!acc.find(d => d.date === day.date)) {
-      acc.push(day);
-    }
-    return acc;
-  }, [] as DailySummary[]);
-  
-  return uniqueSummaries.sort((a, b) => b.date.localeCompare(a.date));
+  return processedSummaries.sort((a, b) => b.date.localeCompare(a.date));
 };
 
 // --- CORRECTED "SMART CONTROLLER" MAIN FUNCTION ---
@@ -122,29 +113,23 @@ export const updateDailyHistory = async (): Promise<void> => {
 
     // CASE 2: Regular User (already updated today)
     } else if (lastUpdateDateString === todayDateString) {
-      console.log('CASE 2: Already updated today. Updating today\'s data in place.');
+      console.log('CASE 2: Already updated today. Refreshing today\'s data only.');
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
       const logsToProcess = await CallLog.load(-1, { minTimestamp: startOfDay.getTime() });
       const todaySummaryArray = processLogsByDay(logsToProcess);
 
-      // Find and update the existing entry for today instead of removing and adding
-      const todayIndex = history.findIndex(day => day.date === todayDateString);
-      
+      // Always remove the old entry for today to avoid duplicates
+      history = history.filter(day => day.date !== todayDateString);
+
+      // --- CORRECTED LOGIC IS HERE ---
       if (todaySummaryArray.length > 0) {
-        // Update the existing entry with new data
-        if (todayIndex !== -1) {
-          history[todayIndex] = todaySummaryArray[0];
-          console.log('Updated existing entry for today with new call data.');
-        } else {
-          // If somehow no entry exists, add it
-          history.unshift(todaySummaryArray[0]);
-          console.log('Added new entry for today with call data.');
-        }
+        // If there were calls today, add the new summary
+        history.unshift(todaySummaryArray[0]);
       } else {
-        // Update with zero data if no calls
-        if (todayIndex !== -1) {
-          history[todayIndex] = {
+        // If NO calls today, add a new zeroed-out entry to maintain history length
+        console.log('No calls found for today, adding a zeroed-out record.');
+        history.unshift({
             date: todayDateString,
             outgoingCount: 0,
             incomingCount: 0,
@@ -152,22 +137,9 @@ export const updateDailyHistory = async (): Promise<void> => {
             rejectedCount: 0,
             avgDuration: 0,
             uniqueContacts: 0,
-          };
-          console.log('Updated existing entry for today with zero data.');
-        } else {
-          // If somehow no entry exists, add zero entry
-          history.unshift({
-            date: todayDateString,
-            outgoingCount: 0,
-            incomingCount: 0,
-            missedCount: 0,
-            rejectedCount: 0,
-            avgDuration: 0,
-            uniqueContacts: 0,
-          });
-          console.log('Added new zero entry for today.');
-        }
+        });
       }
+      // --- END OF CORRECTION ---
 
     // CASE 3: Returning User (missed one or more days)
     } else {
@@ -179,40 +151,16 @@ export const updateDailyHistory = async (): Promise<void> => {
       const newSummaries = processLogsByDay(logsToProcess);
 
       if (newSummaries.length > 0) {
-        // Update existing entries or add new ones without creating duplicates
-        for (const newSummary of newSummaries) {
-          const existingIndex = history.findIndex(day => day.date === newSummary.date);
-          if (existingIndex !== -1) {
-            // Update existing entry in place
-            history[existingIndex] = newSummary;
-            console.log(`Updated existing entry for ${newSummary.date}`);
-          } else {
-            // Add new entry
-            history.push(newSummary);
-            console.log(`Added new entry for ${newSummary.date}`);
-          }
-        }
-        
-        // Sort by date (newest first)
-        history = history.sort((a, b) => b.date.localeCompare(a.date));
+        const newDates = new Set(newSummaries.map(s => s.date));
+        const oldHistoryToKeep = history.filter(day => !newDates.has(day.date));
+        history = [...newSummaries, ...oldHistoryToKeep].sort((a, b) => b.date.localeCompare(a.date));
       }
     }
 
     // --- Finalize and save ---
-    // Deduplicate by date to ensure no duplicate entries for any day
-    const uniqueHistory = history.reduce((acc, day) => {
-      if (!acc.find(d => d.date === day.date)) {
-        acc.push(day);
-      }
-      return acc;
-    }, [] as DailySummary[]);
-    
-    if (uniqueHistory.length > HISTORY_LENGTH) {
-      history = uniqueHistory.slice(0, HISTORY_LENGTH);
-    } else {
-      history = uniqueHistory;
+    if (history.length > HISTORY_LENGTH) {
+      history = history.slice(0, HISTORY_LENGTH);
     }
-    
     await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(history));
     await AsyncStorage.setItem(LAST_UPDATE_KEY, todayDateString);
     console.log(`History update complete. Total entries: ${history.length}.`);

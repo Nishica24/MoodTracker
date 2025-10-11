@@ -81,11 +81,11 @@ interface ScreenTimeData {
 // SECTION 3: EXISTING REPORT GENERATION (No changes needed here)
 // ========================================================================
 
-const BACKEND_URL = 'http://localhost:5000';
+const BACKEND_URL = 'https://moodtracker-aaj4.onrender.com';
 
 export async function generateMoodReport(moodData: MoodData): Promise<ReportData> {
   try {
-    const response = await fetch(`http://localhost:5000/generate-mood-report`, {
+    const response = await fetch(`https://moodtracker-aaj4.onrender.com/generate-mood-report`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
