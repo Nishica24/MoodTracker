@@ -19,7 +19,7 @@ export const handleMicrosoftLogin = async (): Promise<boolean> => {
   try {
     const deviceId = await getOrCreateDeviceId();
     // Use localhost with adb reverse for Android devices; works on iOS simulator too
-    const base = 'http://localhost:5000';
+    const base = 'https://moodtracker-9ygs.onrender.com';
     const loginUrl = `${base}/login?device_id=${encodeURIComponent(deviceId)}`;
 
     const pollConnectionStatus = async (maxAttempts = 10, delayMs = 1000): Promise<boolean> => {
@@ -61,7 +61,7 @@ export const handleMicrosoftLogin = async (): Promise<boolean> => {
 
 export const fetchMicrosoftMe = async () => {
   const deviceId = await getOrCreateDeviceId();
-  const base = 'http://localhost:5000';
+  const base = 'https://moodtracker-9ygs.onrender.com';
   const res = await fetch(`${base}/graph/me?device_id=${encodeURIComponent(deviceId)}`);
   if (!res.ok) throw new Error('Failed to fetch Microsoft profile');
   return res.json();
@@ -69,7 +69,7 @@ export const fetchMicrosoftMe = async () => {
 
 export const fetchMicrosoftEvents = async () => {
   const deviceId = await getOrCreateDeviceId();
-  const base = 'http://localhost:5000';
+  const base = 'https://moodtracker-9ygs.onrender.com';
   const res = await fetch(`${base}/graph/events?device_id=${encodeURIComponent(deviceId)}`);
   if (!res.ok) throw new Error('Failed to fetch events');
   return res.json();
@@ -77,7 +77,7 @@ export const fetchMicrosoftEvents = async () => {
 
 export const fetchWorkStress = async (period: 'week' | 'month' | 'quarter' = 'week') => {
   const deviceId = await getOrCreateDeviceId();
-  const base = 'http://localhost:5000';
+  const base = 'https://moodtracker-9ygs.onrender.com';
   const url = `${base}/graph/work-stress?device_id=${encodeURIComponent(deviceId)}&period=${encodeURIComponent(period)}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to fetch work stress');
@@ -87,7 +87,7 @@ export const fetchWorkStress = async (period: 'week' | 'month' | 'quarter' = 'we
 export const checkMicrosoftConnection = async (): Promise<boolean> => {
   try {
     const deviceId = await getOrCreateDeviceId();
-    const base = 'http://localhost:5000';
+    const base = 'https://moodtracker-9ygs.onrender.com';
     const url = `${base}/connection-status?device_id=${encodeURIComponent(deviceId)}`;
     
     console.log(`🔍 DEBUG: Checking Microsoft connection at: ${url}`);
@@ -168,7 +168,7 @@ export const getMicrosoftModalShown = async (): Promise<boolean> => {
 export const fetchDashboardScores = async () => {
   try {
     const deviceId = await getOrCreateDeviceId();
-    const base = 'http://localhost:5000';
+    const base = 'https://moodtracker-9ygs.onrender.com';
     const url = `${base}/dashboard/scores?device_id=${encodeURIComponent(deviceId)}`;
     
     console.log(`🔍 DEBUG: Fetching dashboard scores from: ${url}`);

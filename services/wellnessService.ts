@@ -36,7 +36,7 @@ const getWorkStressData = async (period: string): Promise<Array<{date: string, s
   try {
     // Get device ID for dashboard scores
     const deviceId = await AsyncStorage.getItem('device_id') || 'default-device';
-    const API_BASE_URL = 'http://localhost:5000';
+    const API_BASE_URL = 'https://moodtracker-9ygs.onrender.com';
     const response = await fetch(`${API_BASE_URL}/dashboard/scores?device_id=${encodeURIComponent(deviceId)}`);
     
     if (!response.ok) {
@@ -142,7 +142,7 @@ const getMoodData = async (period: string): Promise<Array<{date: string, score: 
     const userId = user.id;
     
     // Fetch mood data from the same API endpoint as dashboard
-    const API_BASE_URL = 'http://localhost:5000';
+    const API_BASE_URL = 'https://moodtracker-9ygs.onrender.com';
     const response = await fetch(`${API_BASE_URL}/api/user-scores/${userId}`);
     
     if (!response.ok) {

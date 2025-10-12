@@ -8,7 +8,7 @@ CLIENT_SECRET = os.getenv('MS_CLIENT_SECRET', 'your-client-secret-here')  # For 
 TENANT_ID = os.getenv('MS_TENANT_ID', 'common')  # 'common' for multi-tenant, or your specific tenant ID
 
 # Redirect URI - must match what you configured in Azure portal
-REDIRECT_URI = os.getenv('MS_REDIRECT_URI', 'http://localhost:5000/auth/callback')
+REDIRECT_URI = os.getenv('MS_REDIRECT_URI', 'https://moodtracker-9ygs.onrender.com/auth/callback')
 
 # Microsoft Graph API scopes
 SCOPES = [
