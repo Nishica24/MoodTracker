@@ -1,17 +1,11 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
+import React from 'react';
+import { View, Text, ScrollView, StyleSheet, SafeAreaView } from 'react-native';
 import { AnalyticsChart } from '@/components/AnalyticsChart';
 import { TrendCard } from '@/components/TrendCard';
 import { Calendar, TrendingUp, TrendingDown, Minus } from 'lucide-react-native';
 
 export default function AnalyticsScreen() {
-  const [selectedPeriod, setSelectedPeriod] = useState('week');
-
-  const periods = [
-    { key: 'week', label: 'Week' },
-    { key: 'month', label: 'Month' },
-    { key: 'quarter', label: '3 Months' },
-  ];
+  const selectedPeriod = 'week';
 
   const trends: Array<{
     title: string;
@@ -54,27 +48,13 @@ export default function AnalyticsScreen() {
         </View>
 
         <View style={styles.content}>
-          <View style={styles.periodSelector}>
-            {periods.map((period) => (
-              <TouchableOpacity
-                key={period.key}
-                style={[
-                  styles.periodButton,
-                  selectedPeriod === period.key && styles.periodButtonSelected
-                ]}
-                onPress={() => setSelectedPeriod(period.key)}
-              >
-                <Text style={[
-                  styles.periodButtonText,
-                  selectedPeriod === period.key && styles.periodButtonTextSelected
-                ]}>
-                  {period.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          {/* Weekly Chart Section */}
+          <View style={styles.chartSection}>
+            <Text style={styles.chartSectionTitle}>Weekly Graph</Text>
           </View>
-
-          <AnalyticsChart userId={123} period={selectedPeriod} />
+          
+          {/* Analytics Chart */}
+          <AnalyticsChart period={selectedPeriod} />
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Key Trends</Text>
@@ -126,33 +106,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     gap: 24,
   },
-  periodSelector: {
-    flexDirection: 'row',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    padding: 4,
-  },
-  periodButton: {
-    flex: 1,
-    paddingVertical: 8,
+  chartSection: {
+    marginBottom: -8,
     alignItems: 'center',
-    borderRadius: 8,
   },
-  periodButtonSelected: {
-    backgroundColor: 'white',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  periodButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6B7280',
-  },
-  periodButtonTextSelected: {
+  chartSectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
     color: '#1F2937',
+    textAlign: 'center',
   },
   section: {
     gap: 16,
