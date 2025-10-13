@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, RefreshControl } from 'react-native';
-import { ScreenTimeChart } from '@/components/ScreenTimeChart';
-import { TrendCard } from '@/components/TrendCard';
+import { ScreenTimeChart } from '../components/ScreenTimeChart';
+import { TrendCard } from '../components/TrendCard';
 import { ArrowLeft, Smartphone, TrendingDown, TrendingUp, Monitor } from 'lucide-react-native';
 import { router } from 'expo-router';
-import { ScreenTimeService, ScreenTimeData, AppUsageData } from '@/services/ScreenTimeService';
-import { generateScreenTimeReport, formatScreenTimeData } from '@/services/reportService';
+import { ScreenTimeService, ScreenTimeData, AppUsageData } from '../services/ScreenTimeService';
+import { generateScreenTimeReport, formatScreenTimeData } from '../services/reportService';
 
 export default function ScreenTimeScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState('week');

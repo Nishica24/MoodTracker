@@ -1,5 +1,5 @@
-import { analyzeAppUsagePatterns, AppCategory } from '@/utils/appCategorization';
-import { UserProfile, getTimeContext } from '@/utils/userProfile';
+import { analyzeAppUsagePatterns, AppCategory } from '../utils/appCategorization';
+import { UserProfile, getTimeContext } from '../utils/userProfile';
 
 export interface ScreenTimeData {
   date: string;

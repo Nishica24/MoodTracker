@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { CircleCheck as CheckCircle, ArrowRight, User, Target, Activity } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { UserProfile, DEFAULT_USER_PROFILE } from '@/utils/userProfile';
+import { UserProfile, DEFAULT_USER_PROFILE } from '../../utils/userProfile';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function OnboardingScreen() {

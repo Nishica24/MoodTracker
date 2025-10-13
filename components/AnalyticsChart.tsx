@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { BarChart3, FileText } from 'lucide-react-native';
-import { getWellnessData, WellnessChartData } from '@/services/wellnessService';
-import { generateMoodReport, createMockMoodData } from '@/services/reportService';
-import { generateAndShowReport } from '@/utils/reportUtils';
+import { getWellnessData, WellnessChartData } from '../services/wellnessService';
+import { generateMoodReport, createMockMoodData } from '../services/reportService';
+import { generateAndShowReport } from '../utils/reportUtils';
 
 interface AnalyticsChartProps {
   period: string;

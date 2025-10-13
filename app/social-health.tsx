@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
-import { SocialHealthChart } from '@/components/SocialHealthChart';
-import { TrendCard } from '@/components/TrendCard';
+import { SocialHealthChart } from '../components/SocialHealthChart';
+import { TrendCard } from '../components/TrendCard';
 import { ArrowLeft, Users, MessageCircle, Heart } from 'lucide-react-native';
 import { router } from 'expo-router';
-import { getHistoricalSocialScores } from '@/scoreFunctions/socialScore';
+import { getHistoricalSocialScores } from '../scoreFunctions/socialScore';
 
 export default function SocialHealthScreen() {
   const [socialTrends, setSocialTrends] = useState<Array<{

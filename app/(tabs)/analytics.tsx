@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet, SafeAreaView } from 'react-native';
-import { AnalyticsChart } from '@/components/AnalyticsChart';
-import { TrendCard } from '@/components/TrendCard';
+import { AnalyticsChart } from '../../components/AnalyticsChart';
+import { TrendCard } from '../../components/TrendCard';
 import { Calendar, TrendingUp, TrendingDown, Minus } from 'lucide-react-native';
 
 export default function AnalyticsScreen() {

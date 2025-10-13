@@ -1,22 +1,22 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, Alert, Modal, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { StatsCard } from '@/components/StatsCard';
-import { QuickActions } from '@/components/QuickActions';
+import { StatsCard } from '../../components/StatsCard';
+import { QuickActions } from '../../components/QuickActions';
 import { Heart, Zap, Moon, Smartphone, LucideIcon, Plus, TrendingUp, RefreshCw, Link } from 'lucide-react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '../../hooks/useAuth';
 // --- CORRECTED --- Use relative paths for stability
 import { updateDailyHistory } from '../../services/callLogsServices';
 import { calculateSocialScore, getHistoricalSocialScores } from '../../scoreFunctions/socialScore';
-import { handleCallLogPermission } from '@/services/permissions';
-import { SleepPermissionTester } from '@/components/SleepPermissionTester';
-import { SleepService, SleepSegment } from '@/services/SleepService';
-import { ScreenTimeService, ScreenTimeData, AppUsageData } from '@/services/ScreenTimeService';
-import { fetchDashboardScores, fetchWorkStress, handleMicrosoftLogin, checkMicrosoftConnection, setMicrosoftConnectionStatus, getMicrosoftConnectionStatus, setMicrosoftModalShown, getMicrosoftModalShown } from '@/services/microsoftPermission';
-import { calculateContextualScreenTimeScore, getScreenTimeInsights } from '@/scoreFunctions/contextualScreenTimeScore';
-import { UserProfile, getUserSpecificWeights, DEFAULT_USER_PROFILE } from '@/utils/userProfile';
+import { handleCallLogPermission } from '../../services/permissions';
+import { SleepPermissionTester } from '../../components/SleepPermissionTester';
+import { SleepService, SleepSegment } from '../../services/SleepService';
+import { ScreenTimeService, ScreenTimeData, AppUsageData } from '../../services/ScreenTimeService';
+import { fetchDashboardScores, fetchWorkStress, handleMicrosoftLogin, checkMicrosoftConnection, setMicrosoftConnectionStatus, getMicrosoftConnectionStatus, setMicrosoftModalShown, getMicrosoftModalShown } from '../../services/microsoftPermission';
+import { calculateContextualScreenTimeScore, getScreenTimeInsights } from '../../scoreFunctions/contextualScreenTimeScore';
+import { UserProfile, getUserSpecificWeights, DEFAULT_USER_PROFILE } from '../../utils/userProfile';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // --- NEW FUNCTION ---

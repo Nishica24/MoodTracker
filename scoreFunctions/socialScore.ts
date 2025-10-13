@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DailySummary, Baseline } from '@/services/callLogsServices'; // Adjust path
+import { DailySummary, Baseline } from '../services/callLogsServices'; // Adjust path
 
 const HISTORY_KEY = 'call_log_history';
 const BASELINE_KEY = 'user_baseline';

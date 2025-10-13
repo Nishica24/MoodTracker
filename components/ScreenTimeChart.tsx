@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Smartphone, TrendingDown, TrendingUp, AlertCircle, FileText } from 'lucide-react-native';
-import { ScreenTimeService, ScreenTimeData, AppUsageData } from '@/services/ScreenTimeService';
-import { generateScreenTimeReport, formatScreenTimeData } from '@/services/reportService';
+import { ScreenTimeService, ScreenTimeData, AppUsageData } from '../services/ScreenTimeService';
+import { generateScreenTimeReport, formatScreenTimeData } from '../services/reportService';
 import { router } from 'expo-router';
 
 interface ScreenTimeChartProps {

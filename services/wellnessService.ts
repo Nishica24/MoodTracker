@@ -1,6 +1,6 @@
 import { ScreenTimeService, ScreenTimeData } from './ScreenTimeService';
-import { getHistoricalSocialScores } from '@/scoreFunctions/socialScore';
-import { getUserSpecificWeights } from '@/utils/userProfile';
+import { getHistoricalSocialScores } from '../scoreFunctions/socialScore';
+import { getUserSpecificWeights } from '../utils/userProfile';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface WellnessData {

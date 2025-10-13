@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
-import { SleepQualityChart } from '@/components/SleepQualityChart';
-import { TrendCard } from '@/components/TrendCard';
-import { SuggestionsBox } from '@/components/SuggestionsBox';
+import { SleepQualityChart } from '../components/SleepQualityChart';
+import { TrendCard } from '../components/TrendCard';
+import { SuggestionsBox } from '../components/SuggestionsBox';
 import { ArrowLeft, Moon, TrendingDown, TrendingUp, Calendar, Bed } from 'lucide-react-native';
 import { router } from 'expo-router';
 

@@ -3,15 +3,15 @@ import {
   View, Text, ScrollView, StyleSheet, SafeAreaView,
   TouchableOpacity, Platform, PermissionsAndroid, AppState
 } from 'react-native';
-import { ConnectionCard } from '@/components/ConnectionCard';
+import { ConnectionCard } from '../../components/ConnectionCard';
 import { Plus, Smartphone, Watch, Calendar, Activity, Headphones, Phone, Moon, Mail, LucideProps } from 'lucide-react-native';
-import { handleMicrosoftLogin, fetchMicrosoftMe, getMicrosoftConnectionStatus, setMicrosoftConnectionStatus, checkMicrosoftConnection } from '@/services/microsoftPermission';
+import { handleMicrosoftLogin, fetchMicrosoftMe, getMicrosoftConnectionStatus, setMicrosoftConnectionStatus, checkMicrosoftConnection } from '../../services/microsoftPermission';
 import { router } from 'expo-router';
 
 // STEP 3: Import the function from its new location
-import { handleCallLogPermission, openAppSettings } from '@/services/permissions'; // Use your correct path alias or relative path
-import { SleepService } from '@/services/SleepService';
-import { ScreenTimeService } from '@/services/ScreenTimeService';
+import { handleCallLogPermission, openAppSettings } from '../../services/permissions'; // Use your correct path alias or relative path
+import { SleepService } from '../../services/SleepService';
+import { ScreenTimeService } from '../../services/ScreenTimeService';
 
 // --- Type Definitions ---
 type Connection = {

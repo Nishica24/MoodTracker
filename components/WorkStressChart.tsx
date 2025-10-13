@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Zap, TrendingDown, TrendingUp, FileText } from 'lucide-react-native';
-import { fetchWorkStress } from '@/services/microsoftPermission';
-import { generateWorkStressReport, createMockWorkStressData } from '@/services/reportService';
-import { generateAndShowReport } from '@/utils/reportUtils';
+import { fetchWorkStress } from '../services/microsoftPermission';
+import { generateWorkStressReport, createMockWorkStressData } from '../services/reportService';
+import { generateAndShowReport } from '../utils/reportUtils';
 
 interface WorkStressChartProps {
   period: string;

@@ -3,8 +3,8 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { useFrameworkReady } from '@/hooks/useFrameworkReady';
-import { AuthProvider } from '@/hooks/useAuth';
+import { useFrameworkReady } from '../hooks/useFrameworkReady';
+import { AuthProvider } from '../hooks/useAuth';
 
 export default function RootLayout() {
   useFrameworkReady();

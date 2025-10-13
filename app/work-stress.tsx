@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
-import { WorkStressChart } from '@/components/WorkStressChart';
-import { TrendCard } from '@/components/TrendCard';
-import { SuggestionsBox } from '@/components/SuggestionsBox';
+import { WorkStressChart } from '../components/WorkStressChart';
+import { TrendCard } from '../components/TrendCard';
+import { SuggestionsBox } from '../components/SuggestionsBox';
 import { ArrowLeft, Zap, TrendingDown, TrendingUp, Calendar, Brain } from 'lucide-react-native';
 import { router } from 'expo-router';
 

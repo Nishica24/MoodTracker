@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Dimensions, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Users, MessageCircle, Heart, FileText } from 'lucide-react-native';
-import { getHistoricalSocialScores } from '@/scoreFunctions/socialScore';
-import { generateMoodReport, createMockMoodData } from '@/services/reportService';
-import { generateAndShowReport } from '@/utils/reportUtils';
+import { getHistoricalSocialScores } from '../scoreFunctions/socialScore';
+import { generateMoodReport, createMockMoodData } from '../services/reportService';
+import { generateAndShowReport } from '../utils/reportUtils';
 
 interface SocialHealthChartProps {
   period: string;
