@@ -1,8 +1,99 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { User, Bell, Shield, CircleHelp as HelpCircle, LogOut, ChevronRight } from 'lucide-react-native';
+import { userService, UserData, UserStats } from '../../services/userService';
+import { authService } from '../../services/authService';
+import { router } from 'expo-router';
 
 export default function ProfileScreen() {
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [userStats, setUserStats] = useState<UserStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadProfileData();
+  }, []);
+
+  const loadProfileData = async () => {
+    try {
+      setLoading(true);
+      
+      // Load user data and stats in parallel
+      const [userDataResult, userStatsResult] = await Promise.all([
+        userService.getUserData(),
+        userService.getUserStats()
+      ]);
+
+      // Set user data
+      if (userDataResult) {
+        setUserData(userDataResult);
+      } else {
+        // Fallback to basic user data from local storage
+        console.log('🔍 DEBUG: Backend fetch failed, using fallback');
+        const fallbackData = await userService.getFallbackUserData();
+        setUserData(fallbackData);
+      }
+
+      // Set user stats
+      if (userStatsResult) {
+        setUserStats(userStatsResult);
+      } else {
+        // Fallback to basic stats
+        console.log('🔍 DEBUG: Stats fetch failed, using fallback');
+        const fallbackStats = await userService.getFallbackStats();
+        setUserStats(fallbackStats);
+      }
+    } catch (error) {
+      console.error('Error loading profile data:', error);
+      // Set fallback data
+      const fallbackData = await userService.getFallbackUserData();
+      const fallbackStats = await userService.getFallbackStats();
+      setUserData(fallbackData);
+      setUserStats(fallbackStats);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('🔍 DEBUG: User initiated sign out');
+              
+              // Clear all authentication data
+              await authService.logout();
+              
+              console.log('🔍 DEBUG: Authentication data cleared');
+              
+              // Clear local state
+              setUserData(null);
+              setUserStats(null);
+              
+              // Redirect to login page
+              router.replace('/(auth)/login');
+              
+              console.log('🔍 DEBUG: Redirected to login page');
+            } catch (error) {
+              console.error('Error during sign out:', error);
+              Alert.alert('Error', 'Failed to sign out. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const menuItems = [
     {
       icon: Bell,
@@ -32,31 +123,52 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.content}>
-          <View style={styles.profileCard}>
-            <View style={styles.avatar}>
-              <User size={32} color="white" />
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#6366F1" />
+              <Text style={styles.loadingText}>Loading profile...</Text>
             </View>
-            <Text style={styles.name}>Alex Johnson</Text>
-            <Text style={styles.email}>alex.johnson@email.com</Text>
-            <Text style={styles.joinDate}>Member since January 2024</Text>
-          </View>
+          ) : (
+            <>
+              <View style={styles.profileCard}>
+                <View style={styles.avatar}>
+                  <User size={32} color="white" />
+                </View>
+                <Text style={styles.name}>
+                  {userData?.name || 'Loading...'}
+                </Text>
+                <Text style={styles.email}>
+                  {userData?.email || 'Loading...'}
+                </Text>
+                <Text style={styles.joinDate}>
+                  Member since {userData?.created_at ? new Date(userData.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Unknown'}
+                </Text>
+              </View>
 
-          <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>127</Text>
-              <Text style={styles.statLabel}>Days tracked</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>8.2</Text>
-              <Text style={styles.statLabel}>Avg mood</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>5</Text>
-              <Text style={styles.statLabel}>Apps connected</Text>
-            </View>
-          </View>
+              <View style={styles.statsContainer}>
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>
+                    {userStats?.days_tracked || 0}
+                  </Text>
+                  <Text style={styles.statLabel}>Days tracked</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>
+                    {userStats?.avg_mood || 0}
+                  </Text>
+                  <Text style={styles.statLabel}>Avg mood</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>
+                    {userStats?.connected_apps || 0}
+                  </Text>
+                  <Text style={styles.statLabel}>Apps connected</Text>
+                </View>
+              </View>
+            </>
+          )}
 
           <View style={styles.menuSection}>
             <Text style={styles.sectionTitle}>Settings</Text>
@@ -74,7 +186,7 @@ export default function ProfileScreen() {
             ))}
           </View>
 
-          <TouchableOpacity style={styles.logoutButton}>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
             <LogOut size={20} color="#EF4444" />
             <Text style={styles.logoutText}>Sign Out</Text>
           </TouchableOpacity>
@@ -211,5 +323,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#EF4444',
+  },
+  loadingContainer: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 40,
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6B7280',
   },
 });
