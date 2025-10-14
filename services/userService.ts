@@ -140,10 +140,10 @@ class UserService {
         return null;
       }
 
-      // Fetch user scores from the existing endpoint
-      console.log('🔍 DEBUG: UserService - Making API call to:', `${API_BASE_URL}/user-scores/${userId}`);
+      // Use the new dedicated stats endpoint
+      console.log('🔍 DEBUG: UserService - Making API call to:', `${API_BASE_URL}/user-stats/${userId}`);
 
-      const response = await fetch(`${API_BASE_URL}/user-scores/${userId}`, {
+      const response = await fetch(`${API_BASE_URL}/user-stats/${userId}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -163,43 +163,11 @@ class UserService {
       const data = await response.json();
       console.log('🔍 DEBUG: UserService - Response data:', data);
 
-      // Calculate stats from user_scores data
-      const scores = data.scores || [];
-      const daysTracked = scores.length;
-      
-      console.log('🔍 DEBUG: Raw scores data:', scores);
-      console.log('🔍 DEBUG: Number of scores:', daysTracked);
-      
-      // Calculate average mood from overallScore field
-      let avgMood = 0;
-      if (scores.length > 0) {
-        console.log('🔍 DEBUG: Individual overallScore values:');
-        scores.forEach((score: any, index: number) => {
-          console.log(`🔍 DEBUG: Score ${index + 1}: overallScore = ${score.overallScore}`);
-        });
-        
-        const totalOverallScore = scores.reduce((sum: number, score: any) => {
-          // Use the overallScore field directly from the database
-          const overallScore = score.overallScore || 0;
-          console.log(`🔍 DEBUG: Adding ${overallScore} to sum (current sum: ${sum})`);
-          return sum + overallScore;
-        }, 0);
-        
-        console.log('🔍 DEBUG: Total overallScore:', totalOverallScore);
-        console.log('🔍 DEBUG: Number of scores:', scores.length);
-        
-        avgMood = Math.round((totalOverallScore / scores.length) * 10) / 10; // Round to 1 decimal
-        
-        console.log('🔍 DEBUG: Calculated average mood:', avgMood);
-      }
-
-      // Get connected apps count
-      const connectedApps = await this.getConnectedAppsCount();
-
+      // Return stats directly from backend (no local calculation needed)
       return {
-        days_tracked: daysTracked,
-        avg_mood: avgMood,
-        connected_apps: connectedApps
+        days_tracked: data.days_tracked || 0,
+        avg_mood: data.avg_mood || 0,
+        connected_apps: data.connected_apps || 0
       };
     } catch (error) {
       console.error('Error fetching user stats:', error);
@@ -207,63 +175,14 @@ class UserService {
     }
   }
 
-  async getConnectedAppsCount(): Promise<number> {
-    try {
-      // Check Microsoft connection status
-      const { checkMicrosoftConnection } = await import('./microsoftPermission');
-      const microsoftConnected = await checkMicrosoftConnection();
-      
-      // Check other permissions (Android only)
-      let connectedCount = 0;
-      
-      // Microsoft Outlook
-      if (microsoftConnected) connectedCount++;
-      
-      // Google Fit is always connected (hardcoded in connections tab)
-      connectedCount++;
-      
-      // For Android, check other permissions
-      if (Platform.OS === 'android') {
-        const { PermissionsAndroid } = require('react-native');
-        const { ScreenTimeService } = await import('./ScreenTimeService');
-        
-        // Check call log permission
-        const hasCallLogPermission = await PermissionsAndroid.check(
-          PermissionsAndroid.PERMISSIONS.READ_CALL_LOG
-        );
-        if (hasCallLogPermission) connectedCount++;
-        
-        // Check sleep permission
-        const hasSleepPermission = await PermissionsAndroid.check(
-          PermissionsAndroid.PERMISSIONS.ACTIVITY_RECOGNITION
-        );
-        if (hasSleepPermission) connectedCount++;
-        
-        // Check screen time permission
-        const hasScreenTimePermission = await ScreenTimeService.checkPermission();
-        if (hasScreenTimePermission) connectedCount++;
-      }
-      
-      console.log('🔍 DEBUG: Connected apps count:', connectedCount);
-      console.log('🔍 DEBUG: Microsoft connected:', microsoftConnected);
-      console.log('🔍 DEBUG: Google Fit (always connected): true');
-      
-      return connectedCount;
-    } catch (error) {
-      console.error('Error getting connected apps count:', error);
-      return 0;
-    }
-  }
-
   // Fallback method to get basic stats if API fails
   async getFallbackStats(): Promise<UserStats | null> {
     try {
-      const connectedApps = await this.getConnectedAppsCount();
-      
+      // Return minimal fallback stats since connected apps calculation is now in backend
       return {
         days_tracked: 0,
         avg_mood: 0,
-        connected_apps: connectedApps
+        connected_apps: 1  // At least Google Fit is always connected
       };
     } catch (error) {
       console.error('Error getting fallback stats:', error);

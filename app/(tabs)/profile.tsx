@@ -18,28 +18,30 @@ export default function ProfileScreen() {
     try {
       setLoading(true);
       
-      // Load user data and stats in parallel
-      const [userDataResult, userStatsResult] = await Promise.all([
-        userService.getUserData(),
-        userService.getUserStats()
-      ]);
-
-      // Set user data
-      if (userDataResult) {
-        setUserData(userDataResult);
+      // Load comprehensive profile data from backend (includes user data and stats)
+      const profileData = await userService.getUserData();
+      
+      if (profileData) {
+        setUserData(profileData);
+        
+        // Extract stats from the comprehensive profile response
+        // The backend now returns stats as part of the profile data
+        const statsData = await userService.getUserStats();
+        if (statsData) {
+          setUserStats(statsData);
+        } else {
+          // Fallback to basic stats
+          console.log('🔍 DEBUG: Stats fetch failed, using fallback');
+          const fallbackStats = await userService.getFallbackStats();
+          setUserStats(fallbackStats);
+        }
       } else {
         // Fallback to basic user data from local storage
         console.log('🔍 DEBUG: Backend fetch failed, using fallback');
         const fallbackData = await userService.getFallbackUserData();
         setUserData(fallbackData);
-      }
-
-      // Set user stats
-      if (userStatsResult) {
-        setUserStats(userStatsResult);
-      } else {
-        // Fallback to basic stats
-        console.log('🔍 DEBUG: Stats fetch failed, using fallback');
+        
+        // Set fallback stats
         const fallbackStats = await userService.getFallbackStats();
         setUserStats(fallbackStats);
       }

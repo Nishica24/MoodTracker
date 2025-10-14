@@ -1434,7 +1434,7 @@ def get_user_scores(user_id):
 
 @app.route('/api/user-profile/<user_id>', methods=['GET'])
 def get_user_profile(user_id):
-    """Get user profile and check if onboarding is complete"""
+    """Get comprehensive user profile with stats and data"""
     try:
         from bson import ObjectId
         
@@ -1448,24 +1448,41 @@ def get_user_profile(user_id):
             logger.error("❌ DEBUG: User not found in database")
             return jsonify({"error": "User not found"}), 404
         
-        # Check if user has any scores (indicates onboarding completion)
-        has_scores = db.user_scores.find_one({"userId": ObjectId(user_id)})
-        logger.info(f"🔍 DEBUG: User has scores: {has_scores is not None}")
+        # Get user's score history for stats calculation
+        scores = list(db.user_scores.find({"userId": ObjectId(user_id)}).sort("date", -1))
+        logger.info(f"🔍 DEBUG: Found {len(scores)} scores for user")
         
-        if has_scores:
-            logger.info(f"🔍 DEBUG: Sample score document: {has_scores}")
+        # Calculate user stats
+        days_tracked = len(scores)
+        avg_mood = 0
+        if scores:
+            total_score = sum(score.get('overallScore', 0) for score in scores if score.get('overallScore'))
+            avg_mood = round(total_score / len(scores), 1) if scores else 0
+            logger.info(f"🔍 DEBUG: Calculated avg_mood: {avg_mood}")
+        
+        # Get connected apps count from user's connection status
+        connected_apps = get_connected_apps_count(user_id)
+        
+        # Check if user has any scores (indicates onboarding completion)
+        has_scores = len(scores) > 0
         
         response_data = {
             "user": {
                 "id": str(user['_id']),
                 "name": user['name'],
-                "email": user['email']
+                "email": user['email'],
+                "created_at": user.get('created_at', datetime.now(timezone.utc)).isoformat()
             },
-            "onboarding_complete": has_scores is not None,
-            "has_scores": has_scores is not None
+            "stats": {
+                "days_tracked": days_tracked,
+                "avg_mood": avg_mood,
+                "connected_apps": connected_apps
+            },
+            "onboarding_complete": has_scores,
+            "has_scores": has_scores
         }
         
-        logger.info(f"🔍 DEBUG: Returning profile data: {response_data}")
+        logger.info(f"🔍 DEBUG: Returning comprehensive profile data: {response_data}")
         
         return jsonify(response_data), 200
         
@@ -1474,6 +1491,107 @@ def get_user_profile(user_id):
         import traceback
         logger.error(f"❌ Traceback: {traceback.format_exc()}")
         return jsonify({"error": "Internal server error"}), 500
+
+@app.route('/api/user-stats/<user_id>', methods=['GET'])
+def get_user_stats(user_id):
+    """Get detailed user statistics"""
+    try:
+        from bson import ObjectId
+        
+        logger.info(f"🔍 DEBUG: get_user_stats called with user_id={user_id}")
+        
+        # Get user's score history
+        scores = list(db.user_scores.find({"userId": ObjectId(user_id)}).sort("date", -1))
+        logger.info(f"🔍 DEBUG: Found {len(scores)} scores for user")
+        
+        # Calculate detailed stats
+        days_tracked = len(scores)
+        
+        # Calculate average mood from overall scores
+        avg_mood = 0
+        if scores:
+            valid_scores = [score.get('overallScore', 0) for score in scores if score.get('overallScore') is not None]
+            if valid_scores:
+                avg_mood = round(sum(valid_scores) / len(valid_scores), 1)
+                logger.info(f"🔍 DEBUG: Calculated avg_mood from {len(valid_scores)} valid scores: {avg_mood}")
+        
+        # Get connected apps count
+        connected_apps = get_connected_apps_count(user_id)
+        
+        # Calculate additional stats
+        recent_scores = scores[:7] if scores else []  # Last 7 days
+        recent_avg = 0
+        if recent_scores:
+            recent_valid_scores = [score.get('overallScore', 0) for score in recent_scores if score.get('overallScore') is not None]
+            if recent_valid_scores:
+                recent_avg = round(sum(recent_valid_scores) / len(recent_valid_scores), 1)
+        
+        # Calculate trend (comparing recent vs older scores)
+        trend = "stable"
+        if len(scores) >= 14:  # Need at least 2 weeks of data
+            older_scores = scores[7:14]  # Previous week
+            if older_scores and recent_scores:
+                older_valid = [score.get('overallScore', 0) for score in older_scores if score.get('overallScore') is not None]
+                recent_valid = [score.get('overallScore', 0) for score in recent_scores if score.get('overallScore') is not None]
+                
+                if older_valid and recent_valid:
+                    older_avg = sum(older_valid) / len(older_valid)
+                    recent_avg_calc = sum(recent_valid) / len(recent_valid)
+                    
+                    if recent_avg_calc > older_avg + 0.5:
+                        trend = "improving"
+                    elif recent_avg_calc < older_avg - 0.5:
+                        trend = "declining"
+        
+        response_data = {
+            "days_tracked": days_tracked,
+            "avg_mood": avg_mood,
+            "connected_apps": connected_apps,
+            "recent_avg": recent_avg,
+            "trend": trend,
+            "total_scores": len(scores),
+            "last_updated": datetime.now(timezone.utc).isoformat()
+        }
+        
+        logger.info(f"🔍 DEBUG: Returning user stats: {response_data}")
+        
+        return jsonify(response_data), 200
+        
+    except Exception as e:
+        logger.error(f"❌ Error fetching user stats: {str(e)}")
+        import traceback
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
+        return jsonify({"error": "Internal server error"}), 500
+
+def get_connected_apps_count(user_id):
+    """Calculate connected apps count for a user"""
+    try:
+        connected_count = 0
+        
+        # Check Microsoft connection status
+        # This would need to be stored in the database for each user
+        # For now, we'll check if user has any Microsoft-related data
+        microsoft_connected = db.user_connections.find_one({
+            "userId": ObjectId(user_id),
+            "service": "microsoft",
+            "status": "connected"
+        })
+        if microsoft_connected:
+            connected_count += 1
+        
+        # Google Fit is always connected (hardcoded)
+        connected_count += 1
+        
+        # Check other Android permissions (would need to be stored per user)
+        # For now, we'll assume basic permissions are granted
+        connected_count += 2  # Call logs and screen time
+        
+        logger.info(f"🔍 DEBUG: Connected apps count for user {user_id}: {connected_count}")
+        return connected_count
+        
+    except Exception as e:
+        logger.error(f"❌ Error calculating connected apps count: {str(e)}")
+        return 1  # At least Google Fit is always connected
 
 @app.route('/dashboard/scores', methods=['GET'])
 def get_dashboard_scores():
