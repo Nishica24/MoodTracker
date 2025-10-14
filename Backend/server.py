@@ -128,7 +128,7 @@ def predict_mood(goals_selected, concerns_selected):
 
 
 # ---------------- API Routes ----------------
-@app.route("/")
+@app.route("/test-database-connection")
 def home():
 
     logger.info("Backend test complete. It is running successfully")
@@ -142,9 +142,6 @@ def home():
         "mood_emoji": "🥲",
         "created_at": datetime.now(timezone.utc)
     })
-
-    for mood_doc in db.Mood_Score.find():
-        print(mood_doc)
 
 
     return jsonify({"message": "Mood Tracker API is running"})
