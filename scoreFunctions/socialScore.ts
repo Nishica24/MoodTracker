@@ -42,11 +42,11 @@ export const calculateSocialScore = async (): Promise<number> => {
 
         // --- Factor 1: Proactive Social Engagement (Weight: High Positive) ---
         const outgoingDiff = todaySummary.outgoingCount - baseline.avgOutgoing;
-        score += (outgoingDiff * 0.75);
+        score += (outgoingDiff * 0.9);
 
         // --- Factor 2: Receptiveness to Contact (Weight: Medium Positive) ---
         const incomingDiff = todaySummary.incomingCount - baseline.avgIncoming;
-        score += (incomingDiff * 0.4);
+        score += (incomingDiff * 0.6);
 
         // --- Factor 3: Conversation Depth (Weight: Medium Positive) ---
         const durationDiff = todaySummary.avgDuration - baseline.avgDuration;

@@ -87,6 +87,8 @@ export const getUserSpecificWeights = (age: number, role: UserProfile['role']) =
  * @returns True if current time is within work hours
  */
 export const isWorkHours = (userProfile: UserProfile): boolean => {
+
+  console.log("inside isWorkHours")
   const now = new Date();
   const currentHour = now.getHours();
   const currentMinute = now.getMinutes();
@@ -107,7 +109,10 @@ export const isWorkHours = (userProfile: UserProfile): boolean => {
  * @returns True if current day is a work day
  */
 export const isWorkDay = (userProfile: UserProfile): boolean => {
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'lowercase' });
+
+//   console.log("Inside isWorkDay")
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+//   print("Inside isWorkDay. Printing today: ", today)
   return userProfile.preferences.workDays?.includes(today) ?? true;
 };
 
@@ -117,13 +122,19 @@ export const isWorkDay = (userProfile: UserProfile): boolean => {
  * @returns Time period context
  */
 export const getTimeContext = (userProfile: UserProfile): 'work' | 'leisure' | 'study' => {
+
+//   console.log("Inside getTimeContext")
   const isWork = isWorkHours(userProfile) && isWorkDay(userProfile);
+//   console.log("Inside getTimeContext. printing isWork: ", isWork)
+
+//   console.log("after iswork")
   
   if (isWork) {
     return 'work';
   } else if (userProfile.role === 'student' && userProfile.preferences.studyHours) {
     const now = new Date();
     const currentHour = now.getHours();
+    console.log("After getHours")
     const [studyStart, studyEnd] = userProfile.preferences.studyHours.map(h => parseInt(h.split(':')[0]));
     
     if (currentHour >= studyStart && currentHour <= studyEnd) {

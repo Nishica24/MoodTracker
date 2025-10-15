@@ -129,6 +129,8 @@ export const getAppCategoryRatio = (
     .filter(app => categorizeApp(app.packageName) === category)
     .reduce((sum, app) => sum + app.usageMs, 0);
 
+  console.log("getAppCategoryRatio function completed")
+
   return categoryUsage / totalUsage;
 };
 
@@ -146,6 +148,8 @@ export const getAppCategoryUsageHours = (
     .filter(app => categorizeApp(app.packageName) === category)
     .reduce((sum, app) => sum + app.usageMs, 0);
 
+  console.log("getAppCategoryUsageHours function completed")
+
   return categoryUsage / (1000 * 60 * 60); // Convert ms to hours
 };
 
@@ -157,6 +161,8 @@ export const getAppCategoryUsageHours = (
 export const analyzeAppUsagePatterns = (
   appUsageData: Array<{ packageName: string; usageMs: number }>
 ) => {
+
+  console.log("inside analyzeAppUsagePatterns function")
   const totalUsage = appUsageData.reduce((sum, app) => sum + app.usageMs, 0);
   const totalHours = totalUsage / (1000 * 60 * 60);
 

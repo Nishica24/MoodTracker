@@ -26,9 +26,13 @@ export const calculateContextualScreenTimeScore = (
   userProfile: UserProfile
 ): number => {
   try {
+
+    console.log("inside calculateContextualScreenTimeScore function")
     // Get today's data
     const today = new Date().toISOString().split('T')[0];
     const todayData = screenTimeData.find(d => d.date === today);
+
+//     console.log("After today date")
     
     if (!todayData) {
       return 5.0; // Neutral score if no data
@@ -36,6 +40,8 @@ export const calculateContextualScreenTimeScore = (
 
     const totalHours = todayData.screenTimeHours;
     const timeContext = getTimeContext(userProfile);
+
+//     console.log("After getTimeContext")
     
     // Convert app usage data to the format expected by analysis functions
     const appUsageForAnalysis = appUsageData.map(app => ({
@@ -54,6 +60,8 @@ export const calculateContextualScreenTimeScore = (
       isWorkFocused: boolean;
     };
     const usageAnalysis: UsageAnalysis = analyzeAppUsagePatterns(appUsageForAnalysis) as UsageAnalysis;
+
+    console.log("After analyzeAppUsagePatterns function call")
     
     // Start with base score
     let score = 5.0;

@@ -3,9 +3,9 @@ import { useAuth } from '../hooks/useAuth';
 import { View, ActivityIndicator } from 'react-native';
 
 export default function Index() {
-  const { isAuthenticated, isLoading, userProfile } = useAuth();
+      const { isAuthenticated, isLoading, userProfile } = useAuth();
 
-  console.log('🔍 DEBUG: Index component render');
+//   console.log('🔍 DEBUG: Index component render');
   console.log(`🔍 DEBUG: isAuthenticated=${isAuthenticated}, isLoading=${isLoading}`);
   console.log(`🔍 DEBUG: userProfile:`, userProfile);
 

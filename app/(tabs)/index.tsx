@@ -164,6 +164,7 @@ export default function DashboardScreen() {
   };
   const fetchScreenTimeSummary = async () => {
     try {
+      console.log("Inside fetchScreenTimeSummary function\n")
       const hasUsageAccess = await ScreenTimeService.checkPermission();
       if (!hasUsageAccess) {
         setScreenTimeHoursToday(null);
@@ -179,6 +180,8 @@ export default function DashboardScreen() {
         ScreenTimeService.getAppUsageData()
       ]);
 
+//       console.log("getScreenTimeData and getAppUsageData done successfully")
+
       setScreenTimeData(screenData);
       setAppUsageData(appData);
 
@@ -190,14 +193,20 @@ export default function DashboardScreen() {
         setScreenTimeHoursToday(null);
       }
 
+//       console.log("After the array if block")
+
       // Calculate contextual screen time score
       if (screenData.length > 0 && appData.length > 0) {
+        console.log("Inside the last if block")
         const contextualScore = calculateContextualScreenTimeScore(screenData, appData, userProfile);
         setContextualScreenTimeScore(contextualScore);
+
+        console.log("Contextual score fetched successfully")
 
         // Get insights
         const insights = getScreenTimeInsights(screenData, appData, userProfile);
         setScreenTimeInsights(insights);
+        console.log("Successfully completed fetchScreenTimeSummary\n")
       }
     } catch (e) {
       console.error('Failed to fetch screen time summary:', e);
