@@ -111,6 +111,33 @@ export default function DashboardScreen() {
   const lastCalculatedScore = useRef<string>('');
   const isRefreshingRef = useRef<boolean>(false);
 
+  // Helper: update dashboardScores.work_stress with today's value from /graph/work-stress
+  const refreshTodayWorkStressFromSeries = async () => {
+    try {
+      const series = await fetchWorkStress('week');
+      const labels = Array.isArray(series?.labels) ? series.labels : [];
+      const data = Array.isArray(series?.data) ? series.data : [];
+      if (labels.length === 0 || data.length === 0) return;
+      const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'short' });
+      const idx = labels.indexOf(todayLabel);
+      if (idx === -1 || typeof data[idx] !== 'number') return;
+      const todayScore = Number(data[idx]);
+      setDashboardScores((prev: any) => {
+        const next = prev ? { ...prev } : {} as any;
+        const level = todayScore < 4 ? 'low' : todayScore < 7 ? 'moderate' : 'high';
+        next.work_stress = {
+          ...(prev?.work_stress ?? {}),
+          score: todayScore,
+          level,
+          trend: prev?.work_stress?.trend ?? 'stable',
+        };
+        return next;
+      });
+    } catch (e) {
+      // Silent fallback; keep existing dashboardScores
+    }
+  };
+
   // Load user profile from AsyncStorage
   const loadUserProfile = async () => {
     try {
@@ -440,6 +467,8 @@ export default function DashboardScreen() {
             const scores = await fetchDashboardScores();
             setDashboardScores(scores);
             console.log('Microsoft dashboard scores loaded:', scores);
+            // Dynamically overwrite today's work stress from 7-day series
+            await refreshTodayWorkStressFromSeries();
           } catch (fetchError) {
             console.error('Failed to fetch Microsoft scores despite backend connection:', fetchError);
             // Don't disconnect - just show that data is temporarily unavailable
@@ -564,6 +593,7 @@ export default function DashboardScreen() {
           const scores = await fetchDashboardScores();
           setDashboardScores(scores);
           console.log('Microsoft scores refreshed:', scores);
+          await refreshTodayWorkStressFromSeries();
         } catch (error) {
           console.error('Failed to refresh Microsoft scores:', error);
           // Don't disconnect - just clear data temporarily
@@ -708,6 +738,7 @@ export default function DashboardScreen() {
           const scores = await fetchDashboardScores();
           setDashboardScores(scores);
           console.log('Microsoft dashboard scores loaded after connection:', scores);
+          await refreshTodayWorkStressFromSeries();
         } catch (fetchError) {
           console.error('Failed to fetch Microsoft scores after connection:', fetchError);
           // Don't reset connection status, just log the error

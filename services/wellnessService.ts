@@ -30,37 +30,53 @@ const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes cache
 
 
 /**
- * Get work stress data from the same source as dashboard
+ * Get work stress data (dynamic 7-day series) from backend
  */
 const getWorkStressData = async (period: string): Promise<Array<{date: string, score: number}>> => {
   try {
-    // Get device ID for dashboard scores
     const deviceId = await AsyncStorage.getItem('device_id') || 'default-device';
     const API_BASE_URL = 'https://moodtracker-9ygs.onrender.com';
-    const response = await fetch(`${API_BASE_URL}/dashboard/scores?device_id=${encodeURIComponent(deviceId)}`);
-    
-    if (!response.ok) {
-      console.log('Failed to fetch work stress data from dashboard API');
+
+    const resp = await fetch(`${API_BASE_URL}/graph/work-stress?device_id=${encodeURIComponent(deviceId)}&period=${encodeURIComponent(period || 'week')}`);
+    if (!resp.ok) {
+      console.log('Failed to fetch /graph/work-stress');
       return [];
     }
-    
-    const data = await response.json();
-    
-    if (!data.work_stress) {
-      console.log('No work stress data in dashboard response');
+
+    const json = await resp.json();
+    const labels: string[] = Array.isArray(json?.labels) ? json.labels : [];
+    const values: number[] = Array.isArray(json?.data) ? json.data.map((v: any) => Number(v)) : [];
+
+    if (labels.length === 0 || values.length === 0 || labels.length !== values.length) {
+      console.log('Unexpected work-stress payload shape');
       return [];
     }
-    
-    // For now, use the current work stress score for all 7 days
-    // In the future, we could implement historical work stress data
+
+    // Map weekday labels back to actual dates of the last 7 days
     const last7Days = getLastNDays(7);
-    const workStressScore = data.work_stress.score || 5.0;
-    
-    return last7Days.map(date => ({
-      date,
-      score: workStressScore
-    }));
-    
+    const dayName = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short' });
+    const datesByLabel = new Map<string, string>();
+    last7Days.forEach(dateStr => {
+      const d = new Date(dateStr);
+      datesByLabel.set(dayName(d), dateStr);
+    });
+
+    const series: Array<{ date: string; score: number }> = [];
+    for (let i = 0; i < labels.length; i++) {
+      const label = labels[i];
+      const score = typeof values[i] === 'number' && !isNaN(values[i] as number) ? values[i] : 5.0;
+      const mappedDate = datesByLabel.get(label);
+      if (mappedDate) {
+        series.push({ date: mappedDate, score });
+      }
+    }
+
+    // Fallback: align by index if label->date mapping missed any
+    if (series.length < 7 && values.length === last7Days.length) {
+      return last7Days.map((date, idx) => ({ date, score: typeof values[idx] === 'number' ? values[idx] : 5.0 }));
+    }
+
+    return series;
   } catch (error) {
     console.error('Error fetching work stress data:', error);
     return [];
