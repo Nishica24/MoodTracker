@@ -42,11 +42,11 @@ export const calculateSocialScore = async (): Promise<number> => {
 
         // --- Factor 1: Proactive Social Engagement (Weight: High Positive) ---
         const outgoingDiff = todaySummary.outgoingCount - baseline.avgOutgoing;
-        score += (outgoingDiff * 1.5);
+        score += (outgoingDiff * 0.75);
 
         // --- Factor 2: Receptiveness to Contact (Weight: Medium Positive) ---
         const incomingDiff = todaySummary.incomingCount - baseline.avgIncoming;
-        score += (incomingDiff * 1.0);
+        score += (incomingDiff * 0.4);
 
         // --- Factor 3: Conversation Depth (Weight: Medium Positive) ---
         const durationDiff = todaySummary.avgDuration - baseline.avgDuration;
@@ -70,7 +70,7 @@ export const calculateSocialScore = async (): Promise<number> => {
 
         // --- Step 2: Estimate the User's Plausible Score Range ---
         const bestCase = 5.0 + (baseline.avgOutgoing * 0.75) + (baseline.avgIncoming * 0.4) + (baseline.avgUniqueContacts * 0.5);
-        const worstCase = 5.0 - (baseline.avgOutgoing * 0.75) - (baseline.avgMissed * 1.0) - (baseline.avgRejected * 1.5);
+        const worstCase = 5.0 - (baseline.avgOutgoing * 1.5) - (baseline.avgMissed * 1.0) - (baseline.avgRejected * 1.5);
 
         console.log('🔍 DEBUG: Score range:', { bestCase, worstCase });
 
@@ -178,7 +178,7 @@ export const getHistoricalSocialScores = async (period: string): Promise<Array<{
 
             // Normalize the score
             const bestCase = 5.0 + (baseline.avgOutgoing * 0.75) + (baseline.avgIncoming * 0.4) + (baseline.avgUniqueContacts * 0.5);
-            const worstCase = 5.0 - (baseline.avgOutgoing * 0.75) - (baseline.avgMissed * 1.0) - (baseline.avgRejected * 1.5);
+            const worstCase = 5.0 - (baseline.avgOutgoing * 1.0) - (baseline.avgMissed * 1.0) - (baseline.avgRejected * 1.5);
             const normalizedScore = normalize(score, worstCase, bestCase);
 
             return {
